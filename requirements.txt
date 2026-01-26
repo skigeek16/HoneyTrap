@@ -12,4 +12,5 @@ regex
 redis
 sentence-transformers
 keybert
-httpx
+openai
+python-dotenv
