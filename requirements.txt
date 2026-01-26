@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
 pydantic-settings
 torch
@@ -12,3 +12,4 @@ regex
 redis
 sentence-transformers
 keybert
+httpx
