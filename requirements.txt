@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+torch
+transformers
+scikit-learn
+numpy
+python-multipart
+requests
+regex
+redis
+sentence-transformers
+keybert
