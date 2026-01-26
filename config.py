@@ -1,5 +1,9 @@
 import os
 from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 class Settings(BaseSettings):
     # API Security
@@ -7,14 +11,14 @@ class Settings(BaseSettings):
     
     # Redis Configuration
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
-    REDIS_DB: int = int(os.getenv("REDIS_DB", 0))
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     USE_REDIS: bool = os.getenv("USE_REDIS", "False").lower() == "true"
 
-    # LLM Configuration (User will provide these)
+    # LLM Configuration - Nebius Token Factory
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
-    LLM_API_URL: str = os.getenv("LLM_API_URL", "")  # e.g., "https://api.openai.com/v1/chat/completions"
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "")  # e.g., "gpt-4" or "gpt-3.5-turbo"
+    LLM_API_URL: str = os.getenv("LLM_API_URL", "https://api.tokenfactory.nebius.com/v1/")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "meta-llama/Llama-3.3-70B-Instruct-fast")
 
     # ML Model Configuration
     MODEL_PHISHING: str = "ealvaradob/bert-finetuned-phishing"
@@ -38,7 +42,7 @@ class Settings(BaseSettings):
     WEIGHT_MULTILINGUAL: float = 0.10
 
     # Device configuration
-    DEVICE: str = os.getenv("DEVICE", "cpu")  # Change to "cuda" for GPU if available
+    DEVICE: str = os.getenv("DEVICE", "cpu")
 
     class Config:
         env_file = ".env"

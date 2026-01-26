@@ -1,21 +1,27 @@
 """
 LLM-Powered Response Generation Engine
-Provides intelligent, context-aware responses using an LLM API
+Provides intelligent, context-aware responses using Nebius Token Factory API
 """
 import os
-import json
-import httpx
 from typing import Dict, Any, Optional
-from config import settings
+from openai import OpenAI
 
 class LLMEngine:
     """LLM-powered response generator for dynamic honeypot conversations"""
     
     def __init__(self):
         self.api_key = os.getenv("LLM_API_KEY", "")
-        self.api_url = os.getenv("LLM_API_URL", "")  # User will provide this
-        self.model = os.getenv("LLM_MODEL", "")  # User will provide this
-        self.enabled = bool(self.api_key and self.api_url)
+        self.api_url = os.getenv("LLM_API_URL", "https://api.tokenfactory.nebius.com/v1/")
+        self.model = os.getenv("LLM_MODEL", "meta-llama/Llama-3.3-70B-Instruct-fast")
+        self.enabled = bool(self.api_key)
+        
+        if self.enabled:
+            self.client = OpenAI(
+                base_url=self.api_url,
+                api_key=self.api_key
+            )
+        else:
+            self.client = None
         
     def is_enabled(self) -> bool:
         return self.enabled
@@ -41,20 +47,20 @@ class LLMEngine:
         Returns:
             Generated response text or None if LLM is not available
         """
-        if not self.enabled:
+        if not self.enabled or not self.client:
             return None
             
         system_prompt = self._build_system_prompt(persona, intelligence_gaps)
-        conversation_context = self._build_conversation_context(session_context)
+        messages = self._build_messages(system_prompt, session_context, scammer_message, detected_intent)
         
         try:
-            response = self._call_llm_api(
-                system_prompt=system_prompt,
-                conversation=conversation_context,
-                current_message=scammer_message,
-                intent=detected_intent
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=150,
+                temperature=0.8,
             )
-            return response
+            return response.choices[0].message.content.strip()
         except Exception as e:
             print(f"LLM Error: {e}")
             return None
@@ -106,12 +112,12 @@ Remember: Keep responses very short and natural, like texting. Don't be overly f
 
         return prompt
     
-    def _build_conversation_context(self, session_context: Dict[str, Any]) -> list:
-        """Build conversation history for LLM context"""
-        messages = []
-        history = session_context.get('conversation_history', [])
+    def _build_messages(self, system_prompt: str, session_context: Dict[str, Any], current_message: str, intent: str) -> list:
+        """Build the messages array for the API call"""
+        messages = [{"role": "system", "content": system_prompt}]
         
-        # Include last 6 messages for context
+        # Add conversation history (last 6 messages for context)
+        history = session_context.get('conversation_history', [])
         for msg in history[-6:]:
             role = "assistant" if msg.get('sender') == 'agent' else "user"
             messages.append({
@@ -119,54 +125,13 @@ Remember: Keep responses very short and natural, like texting. Don't be overly f
                 "content": msg.get('text', '')
             })
         
-        return messages
-    
-    def _call_llm_api(
-        self, 
-        system_prompt: str, 
-        conversation: list, 
-        current_message: str,
-        intent: str
-    ) -> str:
-        """Make the actual API call to the LLM service"""
-        
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(conversation)
+        # Add current message
         messages.append({
             "role": "user", 
-            "content": f"[Scammer's message - detected intent: {intent}]\n{current_message}"
+            "content": f"{current_message}"
         })
         
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": 150,  # Keep responses short
-            "temperature": 0.8,  # Some creativity for natural responses
-        }
-        
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                self.api_url,
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            # Handle both OpenAI and compatible API formats
-            if "choices" in result:
-                return result["choices"][0]["message"]["content"].strip()
-            elif "response" in result:
-                return result["response"].strip()
-            elif "content" in result:
-                return result["content"].strip()
-            else:
-                return result.get("text", "").strip()
+        return messages
 
 
 # Singleton instance
