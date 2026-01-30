@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from models import IncomingRequest, APIResponse, ExtractedIntelligence
+from models import IncomingRequest, APIResponse, ExtractedIntelligence, SimpleReply
 from session_manager import SessionManager
 from detectors.engine import ScamDetectionEngine
 from personas.manager import PersonaManager
@@ -41,7 +41,7 @@ async def health():
     """Alternative health check"""
     return {"status": "healthy", "version": "1.0"}
 
-@app.post("/v1/chat", response_model=APIResponse)
+@app.post("/v1/chat", response_model=SimpleReply)
 async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., alias="x-api-key")):
     """
     Main honeypot chat endpoint.
@@ -50,7 +50,7 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
     - Detects if message is a scam
     - Engages using believable personas
     - Extracts intelligence (UPI IDs, bank accounts, phishing links)
-    - Returns structured JSON response
+    - Returns simple JSON response: {"status": "success", "reply": "..."}
     """
     # Validate API key
     if x_api_key != settings.API_KEY:
@@ -92,8 +92,11 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
         # Update session with new messages
         session_manager.update_session(session, request.message.text, agent_msg)
         
-        # Format and return response
-        return session_manager.format_response(session, agent_msg, should_engage)
+        # Send GUVI callback if scam detected
+        session_manager.send_guvi_callback_if_ready(session, should_engage)
+        
+        # Return simple reply format as per Section 8
+        return SimpleReply(status="success", reply=agent_msg)
     
     except Exception as e:
         # Log error and return graceful response

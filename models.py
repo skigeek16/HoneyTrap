@@ -1,23 +1,49 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from intelligence.models import IntelligenceState
 
 class Message(BaseModel):
-    sender: str  # "scammer" or "user"
+    sender: str = "scammer"  # Default to scammer
     text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[Any] = None  # Accept any timestamp format
+    
+    @field_validator('timestamp', mode='before')
+    @classmethod
+    def parse_timestamp(cls, v):
+        if v is None:
+            return datetime.utcnow().isoformat()
+        return v  # Keep as string or whatever format
 
 class Metadata(BaseModel):
     channel: str = "SMS"
     language: str = "en"
     locale: str = "IN"
+    
+    class Config:
+        extra = "allow"  # Allow extra fields
 
 class IncomingRequest(BaseModel):
     sessionId: str = Field(..., description="Unique session ID")
-    message: Message
-    conversationHistory: List[Message] = []
-    metadata: Optional[Metadata] = None
+    message: Union[str, Dict[str, Any], Message]  # Accept string, dict, or Message
+    conversationHistory: Optional[List[Any]] = []
+    metadata: Optional[Union[Dict[str, Any], Metadata]] = None
+    
+    class Config:
+        extra = "allow"  # Allow extra fields
+    
+    @field_validator('message', mode='before')
+    @classmethod
+    def parse_message(cls, v):
+        if isinstance(v, str):
+            return Message(sender="scammer", text=v)
+        if isinstance(v, dict):
+            # Handle dict with 'text' field
+            text = v.get('text', v.get('content', ''))
+            sender = v.get('sender', 'scammer')
+            timestamp = v.get('timestamp')
+            return Message(sender=sender, text=text, timestamp=timestamp)
+        return v
 
 class ExtractedIntelligence(BaseModel):
     bankAccounts: List[str] = []
@@ -25,41 +51,29 @@ class ExtractedIntelligence(BaseModel):
     phishingLinks: List[str] = []
     phoneNumbers: List[str] = []
     suspiciousKeywords: List[str] = []
-    organizationClaims: List[str] = []
-    agentNotes: str = ""
+    
+    class Config:
+        extra = "ignore"
+
+class SimpleReply(BaseModel):
+    """Simple response format as per Section 8 of problem statement"""
+    status: str = "success"
+    reply: str
+
+class EngagementMetrics(BaseModel):
+    engagementDurationSeconds: int = 0
+    totalMessagesExchanged: int = 0
 
 class APIResponse(BaseModel):
     status: str = "success"
     scamDetected: bool
-    engagementMetrics: Dict[str, Any]
-    totalMessagesExchanged: int
-    extractedIntelligence: Optional[ExtractedIntelligence] = None
+    engagementMetrics: EngagementMetrics
+    extractedIntelligence: ExtractedIntelligence
+    agentNotes: str = ""
     
     class Config:
-        json_schema_extra = {
-            "example": {
-                "status": "success",
-                "scamDetected": True,
-                "totalMessagesExchanged": 3,
-                "engagementMetrics": {
-                    "duration_seconds": 45.2,
-                    "phase": "Building Rapport",
-                    "scammer_patience": 85.0,
-                    "intelligence_completion": 30.0,
-                    "persona_used": "Ramesh Uncle",
-                    "entities_extracted": 2
-                },
-                "extractedIntelligence": {
-                    "bankAccounts": [],
-                    "upiIds": ["scammer@upi"],
-                    "phishingLinks": [],
-                    "phoneNumbers": ["+919876543210"],
-                    "suspiciousKeywords": ["urgent", "payment"],
-                    "organizationClaims": ["Income Tax Department"],
-                    "agentNotes": "Detected entities: UPI_ID, PHONE_IN | PRIMARY intel extracted: 1 items"
-                }
-            }
-        }
+        # Ensure exact JSON output
+        json_encoders = {}
 
 class SessionState(BaseModel):
     session_id: str
@@ -73,3 +87,4 @@ class SessionState(BaseModel):
     message_count: int = 0
     scammer_patience: float = 100.0
     last_active: datetime = Field(default_factory=datetime.utcnow)
+    start_time: datetime = Field(default_factory=datetime.utcnow)
