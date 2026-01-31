@@ -59,6 +59,7 @@ class SimpleReply(BaseModel):
     """Simple response format as per Section 8 of problem statement"""
     status: str = "success"
     reply: str
+    scamDetected: bool = False
 
 class EngagementMetrics(BaseModel):
     engagementDurationSeconds: int = 0
