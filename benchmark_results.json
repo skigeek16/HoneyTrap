@@ -1,0 +1,206 @@
+{
+  "metrics": {
+    "tp": 12,
+    "fp": 0,
+    "tn": 12,
+    "fn": 0,
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0
+  },
+  "results": [
+    {
+      "message": "Your bank account will be blocked today. Verify im...",
+      "type": "Bank Fraud",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Oh no, kindly help me, how to verify only? I am not understa..."
+    },
+    {
+      "message": "Congratulations! You won \u20b950 lakh in lottery. Pay ...",
+      "type": "Lottery Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "How much time will this take? need to check with my CA, how ..."
+    },
+    {
+      "message": "This is Income Tax Department. Pay pending tax of ...",
+      "type": "Tax Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Oh no ji, how much to pay and where to pay, kindly tell me"
+    },
+    {
+      "message": "Your UPI account is suspended. Share OTP to reacti...",
+      "type": "UPI Fraud",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "OTP not coming na, my internet is slow, kindly wait"
+    },
+    {
+      "message": "URGENT: Transfer \u20b910000 to avoid account suspensio...",
+      "type": "Urgency Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Beta please explain, how to transfer, my internet is slow na..."
+    },
+    {
+      "message": "I am calling from SBI. Your ATM card will be block...",
+      "type": "Bank Impersonation",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Oh no, ji, my husband will get so worried, kindly tell me wh..."
+    },
+    {
+      "message": "You have won iPhone 15! Click http://bit.ly/freeip...",
+      "type": "Prize Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "is this verified? kindly send me details on email na"
+    },
+    {
+      "message": "Your son is in police custody. Send \u20b950000 immedia...",
+      "type": "Emergency Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Oh no, my son in police custody? kindly help me, how to send..."
+    },
+    {
+      "message": "Work from home job! Earn \u20b95000 daily. Just invest ...",
+      "type": "Job Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "How much time will this take? Need to know more, very busy o..."
+    },
+    {
+      "message": "Your Aadhaar is linked to illegal activities. Pay ...",
+      "type": "Aadhaar Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "Is this verified? kindly send me details on email na"
+    },
+    {
+      "message": "RBI alert: Your account is frozen. Share account d...",
+      "type": "RBI Impersonation",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "How much time will this take, kindly tell me, I am very busy..."
+    },
+    {
+      "message": "Crypto investment opportunity! 500% returns guaran...",
+      "type": "Investment Scam",
+      "actual": "SCAM",
+      "detected": "SCAM",
+      "status": "\u2705 TP",
+      "reply": "How much I need to invest, kindly tell me amount, I am very ..."
+    },
+    {
+      "message": "Hi, how are you doing today?",
+      "type": "Greeting",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Can you tell me the weather forecast for tomorrow?",
+      "type": "Weather Query",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "What time does the movie start?",
+      "type": "General Query",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Happy birthday! Wishing you a wonderful year ahead...",
+      "type": "Wishes",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "The meeting is scheduled for 3 PM tomorrow.",
+      "type": "Meeting Info",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Please find the attached document for your review.",
+      "type": "Work Email",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Thanks for helping me with the project yesterday.",
+      "type": "Gratitude",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Let me know when you're free to discuss the propos...",
+      "type": "Work Query",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "I'll pick you up from the airport at 6 PM.",
+      "type": "Travel Info",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "The restaurant is fully booked for Saturday.",
+      "type": "Reservation Info",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "Don't forget to bring the documents for the interv...",
+      "type": "Reminder",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    },
+    {
+      "message": "The parcel has been delivered to your address.",
+      "type": "Delivery Update",
+      "actual": "NORMAL",
+      "detected": "NORMAL",
+      "status": "\u2705 TN",
+      "reply": "Thank you for your message, but I'm not interested."
+    }
+  ]
+}

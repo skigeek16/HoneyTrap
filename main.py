@@ -96,7 +96,7 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
         session_manager.send_guvi_callback_if_ready(session, should_engage)
         
         # Return simple reply format as per Section 8
-        return SimpleReply(status="success", reply=agent_msg)
+        return SimpleReply(status="success", reply=agent_msg, scamDetected=should_engage)
     
     except Exception as e:
         # Log error and return graceful response
