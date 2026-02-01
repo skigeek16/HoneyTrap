@@ -16,14 +16,36 @@ API_URL = "http://localhost:8000/v1/chat"
 API_KEY = "secret-key-12345"
 
 # Limit messages to test (set to None for all)
-MAX_MESSAGES = 50  # Adjust this for faster testing
+MAX_MESSAGES = 200  # Testing 200 per category
 
-def load_messages(file_path):
+def is_phone_call(msg):
+    """Detect if message is a phone call script (not SMS)"""
+    call_indicators = [
+        r'\bpress \d\b',  # "Press 1", "Press 2"
+        r'\bthis call\b',
+        r'\bcourtesy call\b',
+        r'\bwe are calling\b',
+        r'\bi am calling\b',
+        r'\bnotification bot\b',
+        r'\bautomated (message|call)\b',
+        r'\bhear this message again\b',
+        r'\bto be connected\b',
+        r'\bspeak with (a|our)\b',
+    ]
+    msg_lower = msg.lower()
+    for pattern in call_indicators:
+        if re.search(pattern, msg_lower):
+            return True
+    # Phone calls tend to be much longer than SMS
+    if len(msg) > 600:
+        return True
+    return False
+
+def load_messages(file_path, sms_only=True):
     """Load messages from archive file"""
     messages = []
     with open(file_path, 'r', encoding='utf-8') as f:
         text = f.read()
-        # Split by numbered pattern (1., 2., etc.) or by blank lines
         lines = text.strip().split('\n')
         current_msg = []
         for line in lines:
@@ -33,13 +55,20 @@ def load_messages(file_path):
                     messages.append(' '.join(current_msg))
                     current_msg = []
             else:
-                # Remove leading number like "1." "25." etc.
                 cleaned = re.sub(r'^\d+\.\s*', '', line)
                 if cleaned:
                     current_msg.append(cleaned)
         if current_msg:
             messages.append(' '.join(current_msg))
-    return [m for m in messages if len(m) > 10]  # Filter out very short
+    
+    messages = [m for m in messages if len(m) > 10]
+    
+    if sms_only:
+        original_count = len(messages)
+        messages = [m for m in messages if not is_phone_call(m)]
+        print(f"Filtered {original_count - len(messages)} phone calls, kept {len(messages)} SMS")
+    
+    return messages
 
 def test_message(msg, idx):
     """Test a single message and return scam_detected flag"""
