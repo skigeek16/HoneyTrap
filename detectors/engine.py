@@ -21,8 +21,8 @@ class ScamDetectionEngine:
         ml_res = self.ml_detector.analyze(text)
         final_score = self._calculate_ensemble_score(rule_res, ml_res)
         
-        # Threshold for pattern-based classification
-        threshold = 30
+        # Lowered threshold for better recall
+        threshold = 22
         decision = "ACTIVATE_AGENT" if final_score >= threshold else "POLITE_DECLINE"
         
         return {
