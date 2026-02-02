@@ -4,17 +4,9 @@ pydantic
 pydantic-settings
 torch
 transformers
-scikit-learn
 numpy
-python-multipart
 requests
 regex
-redis
-sentence-transformers
-keybert
 openai
 python-dotenv
-sentencepiece
-tiktoken
-protobuf
 httpx

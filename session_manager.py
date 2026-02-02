@@ -1,28 +1,19 @@
 import json
-import redis
 import requests
 from datetime import datetime
 from typing import Optional
 from models import SessionState, IncomingRequest, APIResponse, ExtractedIntelligence, EngagementMetrics
-from config import settings
 
 GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
 class SessionManager:
     def __init__(self):
-        if settings.USE_REDIS:
-            self.redis_client = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
-        else:
-            self.memory_store = {}
+        self.memory_store = {}
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
-        if settings.USE_REDIS:
-            data = self.redis_client.get(f"session:{session_id}")
-            return SessionState(**json.loads(data)) if data else None
         return self.memory_store.get(session_id)
 
     def create_session(self, request: IncomingRequest) -> SessionState:
-        # Handle metadata - could be dict or Metadata object
         if request.metadata is None:
             meta = {}
         elif isinstance(request.metadata, dict):
@@ -39,10 +30,7 @@ class SessionManager:
 
     def save_session(self, session: SessionState):
         session.last_active = datetime.utcnow()
-        if settings.USE_REDIS:
-            self.redis_client.setex(f"session:{session.session_id}", 86400, session.model_dump_json())
-        else:
-            self.memory_store[session.session_id] = session
+        self.memory_store[session.session_id] = session
 
     def update_session(self, session: SessionState, scammer_msg: str, agent_msg: str):
         session.message_count += 1
@@ -69,21 +57,16 @@ class SessionManager:
 
     def format_response(self, session, agent_msg, scam_detected) -> APIResponse:
         intel = session.intelligence
-        
-        # Calculate duration
         duration_seconds = int((datetime.utcnow() - session.start_time).total_seconds())
         
-        # Build extracted intelligence - only 3 fields as per spec
         extracted = ExtractedIntelligence(
             bankAccounts=[e.value for e in intel.entities if e.type == "BANK_ACC"],
             upiIds=[e.value for e in intel.entities if e.type == "UPI_ID"],
             phishingLinks=[e.value for e in intel.entities if e.type == "URL"]
         )
         
-        # Generate agent notes
         agent_notes = self._generate_agent_notes(session, intel)
         
-        # Send to GUVI callback if scam detected and we have intel
         if scam_detected and session.message_count >= 2:
             self._send_guvi_callback(session, scam_detected, extracted, agent_notes)
         
@@ -115,25 +98,7 @@ class SessionManager:
         
         return " | ".join(notes) if notes else "Engagement initiated"
     
-    def send_guvi_callback_if_ready(self, session, scam_detected: bool):
-        """Public method to send GUVI callback when appropriate"""
-        if scam_detected and session.message_count >= 2:
-            intel = session.intelligence
-            
-            # Build extracted intelligence with ALL required fields
-            extracted = ExtractedIntelligence(
-                bankAccounts=[e.value for e in intel.entities if e.type == "BANK_ACC"],
-                upiIds=[e.value for e in intel.entities if e.type == "UPI_ID"],
-                phishingLinks=[e.value for e in intel.entities if e.type == "URL"],
-                phoneNumbers=[e.value for e in intel.entities if e.type == "PHONE_IN"],
-                suspiciousKeywords=[e.value for e in intel.entities if e.type == "KEYWORD"]
-            )
-            
-            agent_notes = self._generate_agent_notes(session, intel)
-            self._send_guvi_callback(session, scam_detected, extracted, agent_notes)
-    
     def _send_guvi_callback(self, session, scam_detected, extracted: ExtractedIntelligence, agent_notes: str):
-        """Send final result to GUVI evaluation endpoint"""
         try:
             payload = {
                 "sessionId": session.session_id,
@@ -142,18 +107,12 @@ class SessionManager:
                 "extractedIntelligence": {
                     "bankAccounts": extracted.bankAccounts,
                     "upiIds": extracted.upiIds,
-                    "phishingLinks": extracted.phishingLinks,
-                    "phoneNumbers": extracted.phoneNumbers,
-                    "suspiciousKeywords": extracted.suspiciousKeywords
+                    "phishingLinks": extracted.phishingLinks
                 },
                 "agentNotes": agent_notes
             }
             
-            response = requests.post(
-                GUVI_CALLBACK_URL,
-                json=payload,
-                timeout=5
-            )
-            print(f"GUVI Callback sent: {response.status_code}")
+            response = requests.post(GUVI_CALLBACK_URL, json=payload, timeout=5)
+            print(f"GUVI Callback: {response.status_code}")
         except Exception as e:
             print(f"GUVI Callback failed: {e}")
