@@ -1,7 +1,5 @@
 import re
 from typing import List
-from transformers import pipeline
-from keybert import KeyBERT
 from .models import Entity
 
 class ExtractionEngine:
@@ -14,9 +12,7 @@ class ExtractionEngine:
         return cls._instance
 
     def _load_resources(self):
-        print("🕵️ Loading Intelligence Extraction Models...")
-        self.ner_pipe = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-        self.kw_model = KeyBERT('distilbert-base-nli-mean-tokens')
+        print("🕵️ Loading Intelligence Extraction...")
         self.patterns = {
             "UPI_ID": re.compile(r'[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}'), 
             "PHONE_IN": re.compile(r'(?:\+91[\-\s]?)?[6-9]\d{9}'),
@@ -48,20 +44,32 @@ class ExtractionEngine:
         return entities
 
     def extract_ner(self, text: str, turn: int) -> List[Entity]:
-        entities = []
-        ner_results = self.ner_pipe(text)
-        for res in ner_results:
-            mapped_type = {"ORG": "ORGANIZATION", "PER": "PERSON_NAME", "LOC": "LOCATION"}.get(res['entity_group'], "UNKNOWN")
-            if mapped_type != "UNKNOWN":
-                entities.append(Entity(
-                    value=res['word'], type=mapped_type, category="TACTICAL",
-                    confidence=float(res['score']), source_turn=turn
-                ))
-        return entities
+        # Simplified - just use regex patterns, skip heavy NER model
+        return []
 
     def extract_keywords(self, text: str, turn: int) -> List[Entity]:
-        keywords = self.kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 2), stop_words='english', top_n=3)
-        return [Entity(value=kw, type="KEYWORD", category="TACTICAL", confidence=score, source_turn=turn) for kw, score in keywords]
+        # Expanded keyword extraction with India-specific terms
+        keywords = []
+        scam_keywords = [
+            # Financial
+            "upi", "account", "transfer", "otp", "password", "urgent", "bank", "payment",
+            "verify", "blocked", "suspended", "kyc", "aadhaar", "pan", "ifsc",
+            # India-specific scams
+            "fastag", "epfo", "pf", "uan", "electricity", "disconnection",
+            # Urgency/Threats
+            "arrest", "police", "legal", "court", "jail", "fine", "penalty",
+            # Prize/Lottery
+            "lottery", "prize", "winner", "jackpot", "claim",
+            # Job/Investment
+            "earning", "investment", "returns", "guaranteed", "work from home",
+            # Hindi/Hinglish
+            "paisa", "rupees", "jaldi", "turant", "abhi"
+        ]
+        text_lower = text.lower()
+        for kw in scam_keywords:
+            if kw in text_lower:
+                keywords.append(Entity(value=kw, type="KEYWORD", category="TACTICAL", confidence=0.8, source_turn=turn))
+        return keywords
 
     def _validate_entity(self, type_name: str, value: str) -> bool:
         if type_name == "UPI_ID": return "@" in value

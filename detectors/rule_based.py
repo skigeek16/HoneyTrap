@@ -135,6 +135,56 @@ class RuleBasedDetector:
             r'\bexclusive (upgrade|offer|deal)\b.{0,40}(payment|account)\b',
         ]
         
+        # Pattern 9: KYC/Update scams (India-specific)
+        self.kyc_scam_patterns = [
+            r'\b(kyc|know your customer).{0,40}(update|pending|expired|required|mandatory)\b',
+            r'\b(update|complete|verify).{0,30}kyc\b',
+            r'\bkyc (deadline|expiry|last date)\b',
+            r'\bpan.{0,20}(aadhaar|aadhar).{0,20}link\b',
+            r'\baadhaar.{0,20}pan.{0,20}link\b',
+            r'\b(aadhaar|aadhar).{0,30}(update|verification|verify)\b',
+            r'\bpan card.{0,30}(update|verify|link)\b',
+        ]
+        
+        # Pattern 10: FASTag/Toll scams
+        self.fastag_scam_patterns = [
+            r'\bfastag.{0,40}(update|kyc|blocked|suspended|recharge|inactive)\b',
+            r'\b(toll|highway).{0,30}(blocked|suspended|update)\b',
+            r'\bvehicle.{0,30}(blacklist|block|seized|impound)\b',
+            r'\bfastag.{0,20}(expired|expiry)\b',
+        ]
+        
+        # Pattern 11: EPFO/PF scams
+        self.epfo_scam_patterns = [
+            r'\b(epfo|pf|provident fund|uan).{0,40}(claim|withdraw|update|pending)\b',
+            r'\bpf (balance|withdrawal|claim)\b',
+            r'\buan.{0,20}(number|update|activate)\b',
+            r'\bepf.{0,30}(passbook|statement|amount)\b',
+        ]
+        
+        # Pattern 12: Electricity/Gas bill scams
+        self.utility_scam_patterns = [
+            r'\b(electricity|power|gas|water).{0,30}(bill|connection|disconnect|cut)\b',
+            r'\b(bill|payment).{0,30}(overdue|pending|due|unpaid)\b',
+            r'\b(connection|supply).{0,30}(disconnect|cut|terminate)\b',
+            r'\bpay.{0,20}(immediately|now|today).{0,20}(avoid|prevent)\b',
+        ]
+        
+        # Pattern 13: Hindi/Hinglish scam keywords
+        self.hindi_scam_patterns = [
+            r'\b(jaldi|turant|abhi|fatafat)\b',  # urgency: quickly, immediately
+            r'\b(paisa|rupaya|rupees|amount)\b.{0,20}(bhejo|send|transfer)\b',
+            r'\b(account|khata).{0,20}(band|block|freeze)\b',
+            r'\b(otp|pin).{0,20}(batao|bolo|bhejo|do)\b',  # tell/send OTP
+            r'\b(police|thana|arrest|jail).{0,20}(bhejenge|jayenge)\b',
+            r'\b(jeetna|jeeta|jeete|inaam|prize|lottery)\b',
+            r'\b(khatrnak|dangerous|problem|dikkat)\b',
+            r'\b(verify|update).{0,20}karo\b',
+            r'\blink (karo|kijiye|karein)\b',  # link karo
+            r'\bapna.{0,20}(number|details|pin)\b',  # your number/details
+            r'\b(bahut|bada|urgent).{0,20}(zaroori|important)\b',
+        ]
+        
         # === LEGITIMATE PATTERNS ===
         self.appointment_patterns = [
             r'\b(appointment|check-?up|session|meeting|visit).{0,40}(scheduled|confirmed|on|at|for)\b',
@@ -177,6 +227,13 @@ class RuleBasedDetector:
         job_scam = self._count_pattern_matches(text, self.job_scam_patterns)
         generic_scam = self._count_pattern_matches(text, self.generic_scam_patterns)
         
+        # India-specific scam patterns
+        kyc_scam = self._count_pattern_matches(text, self.kyc_scam_patterns)
+        fastag_scam = self._count_pattern_matches(text, self.fastag_scam_patterns)
+        epfo_scam = self._count_pattern_matches(text, self.epfo_scam_patterns)
+        utility_scam = self._count_pattern_matches(text, self.utility_scam_patterns)
+        hindi_scam = self._count_pattern_matches(text, self.hindi_scam_patterns)
+        
         # Count legitimate pattern matches
         appointment = self._count_pattern_matches(text, self.appointment_patterns)
         delivery = self._count_pattern_matches(text, self.delivery_patterns)
@@ -203,6 +260,18 @@ class RuleBasedDetector:
         if generic_scam > 0:
             scam_score += 15 + (generic_scam * 5)
         
+        # India-specific scam scores
+        if kyc_scam > 0:
+            scam_score += 22 + (kyc_scam * 7)
+        if fastag_scam > 0:
+            scam_score += 22 + (fastag_scam * 7)
+        if epfo_scam > 0:
+            scam_score += 20 + (epfo_scam * 6)
+        if utility_scam > 0:
+            scam_score += 18 + (utility_scam * 5)
+        if hindi_scam > 0:
+            scam_score += 15 + (hindi_scam * 5)
+        
         # Combination bonus
         scam_categories = sum([
             1 if sensitive_info > 0 else 0,
@@ -213,6 +282,11 @@ class RuleBasedDetector:
             1 if security_scam > 0 else 0,
             1 if job_scam > 0 else 0,
             1 if generic_scam > 0 else 0,
+            1 if kyc_scam > 0 else 0,
+            1 if fastag_scam > 0 else 0,
+            1 if epfo_scam > 0 else 0,
+            1 if utility_scam > 0 else 0,
+            1 if hindi_scam > 0 else 0,
         ])
         
         if scam_categories >= 3:
@@ -244,6 +318,11 @@ class RuleBasedDetector:
             "security_scam": security_scam > 0,
             "job_scam": job_scam > 0,
             "generic_scam": generic_scam > 0,
+            "kyc_scam": kyc_scam > 0,
+            "fastag_scam": fastag_scam > 0,
+            "epfo_scam": epfo_scam > 0,
+            "utility_scam": utility_scam > 0,
+            "hindi_scam": hindi_scam > 0,
             "legitimate_appointment": appointment > 0,
             "legitimate_delivery": delivery > 0,
             "legitimate_professional": professional > 0,

@@ -31,10 +31,11 @@ class ImperfectionEngine:
             "understand": ["undrstnd", "understand"], "know": ["kno", "know"]
         }
         
-        # Indian slang phrases to append
+        # Indian English phrases (diverse, not just 'na')
         self.indian_slangs = [
-            " na", " ji", " yaar", " bhai", " sir", " madam",
-            " only", " actually", " basically", " kindly"
+            " ji", " sir", " please", " only", " actually",
+            " basically", " kindly", " okay?", " right?",
+            " madam", " bhai", "...", " no?", " also"
         ]
         
         # Emotion-based modifiers
