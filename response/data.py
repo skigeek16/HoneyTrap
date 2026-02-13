@@ -126,6 +126,51 @@ TEMPLATES = [
         "intent": ["phishing_attempt", "requesting_payment"],
         "text": "Let me find my reading glasses. I cannot see the small text clearly on phone."
     },
+    {
+        "id": "stall_son_help_1", "strategy": "stall_family_help", "phase": ["Active Extraction", "Building Rapport"],
+        "intent": ["requesting_payment", "phishing_attempt"],
+        "text": "Wait, let me ask my son to help. He understands these things better. 2 minutes please."
+    },
+    {
+        "id": "stall_meeting_1", "strategy": "stall_busy", "phase": ["Initial Contact", "Building Rapport"],
+        "intent": ["requesting_payment", "threatening", "job_offer"],
+        "text": "Currently in meeting, can't do it now, what's the reference number kindly?"
+    },
+    {
+        "id": "stall_email_1", "strategy": "stall_email_request", "phase": ["Initial Contact", "Building Rapport"],
+        "intent": ["requesting_payment", "phishing_attempt"],
+        "text": "Is this verified? Can you send me details on email ji?"
+    },
+    {
+        "id": "stall_lunch_1", "strategy": "stall_break", "phase": ["Building Rapport", "Active Extraction"],
+        "intent": ["requesting_payment", "threatening"],
+        "text": "I am eating lunch right now. Can you call after 30 minutes? I will definitely respond."
+    },
+    {
+        "id": "stall_app_crash_1", "strategy": "stall_app_issue", "phase": ["Active Extraction"],
+        "intent": ["requesting_payment", "phishing_attempt"],
+        "text": "My app crashed again. This old phone has problems. Give me time to restart it."
+    },
+    {
+        "id": "stall_password_1", "strategy": "stall_password_forgot", "phase": ["Active Extraction"],
+        "intent": ["requesting_payment", "phishing_attempt"],
+        "text": "I forgot my banking password. Let me try to remember... or should I reset it?"
+    },
+    {
+        "id": "stall_kyc_1", "strategy": "stall_kyc_confusion", "phase": ["Active Extraction", "Building Rapport"],
+        "intent": ["phishing_attempt", "identity_verification"],
+        "text": "KYC update? But I just did it last month at the bank branch. Can you check again?"
+    },
+    {
+        "id": "stall_fastag_1", "strategy": "stall_fastag_confusion", "phase": ["Active Extraction", "Building Rapport"],
+        "intent": ["requesting_payment"],
+        "text": "FASTag blocked? But I just recharged it yesterday only. Let me check my SMS."
+    },
+    {
+        "id": "stall_electricity_1", "strategy": "stall_bill_confusion", "phase": ["Active Extraction", "Building Rapport"],
+        "intent": ["threatening", "requesting_payment"],
+        "text": "Electricity disconnection? But I have automatic payment set up. Maybe there was some error."
+    },
     
     # ==================== VERIFICATION REQUESTS ====================
     {
