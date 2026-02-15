@@ -192,21 +192,6 @@ HoneyTrap/
 └── .env.example               # Environment variables template
 ```
 
-## Test Results
-
-Tested against 3 sample evaluation scenarios:
-
-| Scenario | Score | Detection | Intelligence | Engagement | Structure |
-|---|---|---|---|---|---|
-| Bank Fraud | 90/100 | 20/20 | 30/40 | 20/20 | 20/20 |
-| UPI Fraud | 80/100 | 20/20 | 20/40 | 20/20 | 20/20 |
-| Phishing | 80/100 | 20/20 | 20/40 | 20/20 | 20/20 |
-| **Average** | **83.3/100** | | | | |
-
-- 100% scam detection rate across all scenarios
-- 100% fake data extraction (all planted intelligence recovered)
-- Average latency: ~16s per turn (within 30s limit)
-
 ## License
 
 MIT
