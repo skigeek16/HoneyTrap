@@ -3,3 +3,24 @@ Agentic Honey-Pot System.pdf
 .gitignore
 new_sample
 venv
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Android
+**/build/
+*.apk
+*.aab
+*.so
+local.properties
+
+# iOS (safe to include)
+ios/Pods/
+ios/.symlinks/
+
+# Misc
+*.log
