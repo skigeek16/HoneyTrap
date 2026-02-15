@@ -4,6 +4,7 @@ pydantic
 pydantic-settings
 torch
 transformers
+sentence-transformers
 numpy
 requests
 regex

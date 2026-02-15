@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+test_*.py
+benchmark*.py
+debug_*.py

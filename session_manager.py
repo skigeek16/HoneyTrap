@@ -98,21 +98,32 @@ class SessionManager:
         
         return " | ".join(notes) if notes else "Engagement initiated"
     
-    def _send_guvi_callback(self, session, scam_detected, extracted: ExtractedIntelligence, agent_notes: str):
-        try:
-            payload = {
-                "sessionId": session.session_id,
-                "scamDetected": scam_detected,
-                "totalMessagesExchanged": session.message_count,
-                "extractedIntelligence": {
-                    "bankAccounts": extracted.bankAccounts,
-                    "upiIds": extracted.upiIds,
-                    "phishingLinks": extracted.phishingLinks
-                },
-                "agentNotes": agent_notes
+    def send_guvi_callback_if_ready(self, session, scam_detected: bool):
+        """Send GUVI callback when scam is detected and enough engagement"""
+        if scam_detected and session.message_count >= 2:
+            intel = session.intelligence
+            
+            # Build extracted intelligence with ALL required fields
+            extracted = {
+                "bankAccounts": [e.value for e in intel.entities if e.type == "BANK_ACC"],
+                "upiIds": [e.value for e in intel.entities if e.type == "UPI_ID"],
+                "phishingLinks": [e.value for e in intel.entities if e.type == "URL"],
+                "phoneNumbers": [e.value for e in intel.entities if e.type == "PHONE_IN"],
+                "suspiciousKeywords": [e.value for e in intel.entities if e.type == "KEYWORD"]
             }
             
-            response = requests.post(GUVI_CALLBACK_URL, json=payload, timeout=5)
-            print(f"GUVI Callback: {response.status_code}")
-        except Exception as e:
-            print(f"GUVI Callback failed: {e}")
+            agent_notes = self._generate_agent_notes(session, intel)
+            
+            try:
+                payload = {
+                    "sessionId": session.session_id,
+                    "scamDetected": scam_detected,
+                    "totalMessagesExchanged": session.message_count,
+                    "extractedIntelligence": extracted,
+                    "agentNotes": agent_notes
+                }
+                
+                response = requests.post(GUVI_CALLBACK_URL, json=payload, timeout=5)
+                print(f"GUVI Callback: {response.status_code} - {response.text[:100]}")
+            except Exception as e:
+                print(f"GUVI Callback failed: {e}")
