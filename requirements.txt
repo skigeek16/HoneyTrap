@@ -13,3 +13,4 @@ httpx
 sqlmodel
 aiosqlite
 websockets
+sentence-transformers

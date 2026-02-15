@@ -132,3 +132,4 @@ class SessionState(BaseModel):
     scammer_patience: float = 100.0
     last_active: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     start_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    ghost_mode: bool = False

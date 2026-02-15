@@ -151,6 +151,10 @@ async def _process_message(session_id: str, message_text: str):
                 "message": "Session not found",
             })
             return
+        # ── Ghost Mode Check (Stop if already completed) ──────────────
+        if hasattr(session, 'ghost_mode') and session.ghost_mode:
+            print(f"👻 Session {session_id} is in GHOST MODE. Ignoring message.")
+            return
 
         # ── Stage 1: Scam Detection (CPU-bound → threadpool) ──────────
         detect_res = await run_in_threadpool(
@@ -185,6 +189,15 @@ async def _process_message(session_id: str, message_text: str):
             session.intelligence,
         )
 
+        # ── Ghost Mode Trigger (Stop if we have enough info) ──────────
+        # If we have gathered enough intelligence (e.g. > 90%), stop responding
+        # effectively "ghosting" the scammer.
+        if session.intelligence.completion_percentage >= 90:
+            print(f"👻 Intelligence complete ({session.intelligence.completion_percentage}%). Activating GHOST MODE for {session_id}.")
+            session.ghost_mode = True
+            session_manager.save_session(session)
+            return
+            
         # ── Stage 4: Response Generation ──────────────────────────────
         intent = detect_res["details"]["ml_ensemble"]["intent"]
         resp_data = await run_in_threadpool(
@@ -226,6 +239,14 @@ async def get_session_info(session_id: str):
         "scam_confidence": session.scam_confidence,
         "intelligence_completion": session.intelligence.completion_percentage,
         "entities_extracted": len(session.intelligence.entities),
+        "ghost_mode": getattr(session, "ghost_mode", False),
+        "intelligence_report": [
+            {
+                "type": e.type,
+                "value": e.value,
+                "confidence": e.confidence
+            } for e in session.intelligence.entities
+        ],
         "persona": session.persona.get("name") if session.persona else None,
     }
 

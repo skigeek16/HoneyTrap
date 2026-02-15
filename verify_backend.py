@@ -82,7 +82,25 @@ async def simulate_conversation():
 
                 # Wait for STALL_MESSAGE (only arrives if scam/suspicious)
                 if p["ui_color"] != "green":
-                    event2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
+                    try:
+                        event2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=10.0))
+                    except asyncio.TimeoutError:
+                        # Timeout might mean Ghost Mode is active (no reply sent)
+                        print(f"\n   ⚠️  Timeout waiting for reply. Checking for Ghost Mode...")
+                        async with httpx.AsyncClient() as client:
+                            chk = await client.get(f"{API_URL}/v1/session/{session_id}")
+                            if chk.status_code == 200 and chk.json().get("ghost_mode"):
+                                print(f"   👻 GHOST MODE CONFIRMED! The bot has stopped responding as intended.")
+                                break
+                            else:
+                                print(f"   ❌ Timeout but Ghost Mode NOT active. Something is wrong.")
+                                raise
+
+                    print(f"   [DEBUG] Received Event 2: {event2}")
+                    if event2.get("type") == "ERROR":
+                        print(f"❌ BACKEND ERROR: {event2['payload'].get('message')}")
+                        continue
+                    
                     p2 = event2["payload"]
                     print(f"\n🤖 HONEYPOT REPLY (delay: {p2['suggested_delay']}s, phase: {p2['phase']}):")
                     print(f"   \"{p2['message_body']}\"")
@@ -99,7 +117,7 @@ async def simulate_conversation():
                         await asyncio.sleep(1.0)
 
             print(f"\n{'=' * 70}")
-            print(f"  ✅ Conversation complete — {len(SCAMMER_MESSAGES)} turns processed")
+            print(f"  ✅ Conversation complete")
             print(f"{'=' * 70}")
 
             # Fetch final session state
@@ -112,11 +130,17 @@ async def simulate_conversation():
                     print(f"   Phase:          {info['phase']}")
                     print(f"   Confidence:     {info['scam_confidence']}%")
                     print(f"   Intel Complete: {info['intelligence_completion']}%")
+                    print(f"   Ghost Mode:     {info.get('ghost_mode', False)}")
                     print(f"   Entities Found: {info['entities_extracted']}")
                     print(f"   Persona:        {info.get('persona', 'None')}")
+                    
+                    if "intelligence_report" in info and info["intelligence_report"]:
+                        print(f"\n🕵️  EXTRACTED INTELLIGENCE REPORT:")
+                        print(f"   {'-'*40}")
+                        for item in info["intelligence_report"]:
+                            print(f"   • [{item['type']}] {item['value']} (conf: {item['confidence']})")
+                        print(f"   {'-'*40}")
 
-    except asyncio.TimeoutError:
-        print("\n⚠️  Timed out waiting for WebSocket event")
     except Exception as e:
         print(f"\n❌ Error: {e}")
 
