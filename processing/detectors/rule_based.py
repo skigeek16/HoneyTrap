@@ -214,8 +214,48 @@ class RuleBasedDetector:
                 count += 1
         return count
 
-    def analyze(self, text: str) -> Dict:
-        """Classify message with broader scam detection"""
+    def analyze(self, text: str, history: list = None) -> Dict:
+        """Classify message with broader scam detection, using conversation history for context."""
+        
+        # Build context from conversation history (only scammer messages)
+        history_text = ""
+        if history:
+            scammer_msgs = [
+                m.get("content", m.get("text", ""))
+                for m in history
+                if m.get("role", m.get("sender", "")) == "scammer"
+            ]
+            if scammer_msgs:
+                history_text = " ".join(scammer_msgs)
+
+        # Analyze CURRENT message
+        current_result = self._analyze_single(text)
+
+        # If no history, return current result as-is
+        if not history_text:
+            return current_result
+
+        # Analyze FULL conversation context (history + current)
+        full_context = f"{history_text} {text}"
+        context_result = self._analyze_single(full_context)
+
+        # Take the HIGHER score — if the conversation as a whole looks
+        # scammy, that should elevate the current message's score
+        if context_result["rule_score"] > current_result["rule_score"]:
+            # Merge: use context score but flag both sets of detections
+            merged_flags = {}
+            for k in current_result["flags"]:
+                merged_flags[k] = current_result["flags"][k] or context_result["flags"][k]
+            context_result["flags"] = merged_flags
+            context_result["scam_categories"] = sum(
+                1 for k, v in merged_flags.items() if v and not k.startswith("legitimate_")
+            )
+            return context_result
+
+        return current_result
+
+    def _analyze_single(self, text: str) -> Dict:
+        """Run rule-based analysis on a single text blob."""
         
         # Count scam pattern matches
         sensitive_info = self._count_pattern_matches(text, self.sensitive_info_patterns)
@@ -335,3 +375,4 @@ class RuleBasedDetector:
             "legitimate_score": legit_score,
             "flag_count": scam_categories
         }
+

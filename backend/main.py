@@ -153,7 +153,9 @@ async def _process_message(session_id: str, message_text: str):
             return
 
         # ── Stage 1: Scam Detection (CPU-bound → threadpool) ──────────
-        detect_res = await run_in_threadpool(detector.evaluate, message_text)
+        detect_res = await run_in_threadpool(
+            detector.evaluate, message_text, history=session.conversation_history
+        )
         should_engage = detect_res["is_scam"]
         session.scam_confidence = detect_res["confidence_score"]
 

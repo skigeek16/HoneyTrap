@@ -15,10 +15,10 @@ class ScamDetectionEngine:
             "investment_opportunity", "urgent_action_required", "identity_verification"
         }
 
-    def evaluate(self, text: str) -> Dict[str, Any]:
-        """Main pipeline with pattern-based classification"""
-        rule_res = self.rule_detector.analyze(text)
-        ml_res = self.ml_detector.analyze(text)
+    def evaluate(self, text: str, history: list = None) -> Dict[str, Any]:
+        """Main pipeline with pattern-based classification, using conversation history for context."""
+        rule_res = self.rule_detector.analyze(text, history=history)
+        ml_res = self.ml_detector.analyze(text, history=history)
         final_score = self._calculate_ensemble_score(rule_res, ml_res)
         
         # Lowered threshold for better recall
