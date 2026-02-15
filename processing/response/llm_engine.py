@@ -49,8 +49,9 @@ class LLMEngine:
         """
         if not self.enabled or not self.client:
             return None
-            
-        system_prompt = self._build_system_prompt(persona, intelligence_gaps)
+        
+        phase = session_context.get('phase', 'Initial Contact')
+        system_prompt = self._build_system_prompt(persona, intelligence_gaps, phase)
         messages = self._build_messages(system_prompt, session_context, scammer_message, detected_intent)
         
         try:
@@ -65,7 +66,7 @@ class LLMEngine:
             print(f"LLM Error: {e}")
             return None
     
-    def _build_system_prompt(self, persona: Dict[str, Any], intelligence_gaps: list) -> str:
+    def _build_system_prompt(self, persona: Dict[str, Any], intelligence_gaps: list, phase: str = "Initial Contact") -> str:
         """Build the system prompt for the LLM based on persona and extraction goals"""
         
         persona_name = persona.get('name', 'Ramesh Uncle')
@@ -75,64 +76,79 @@ class LLMEngine:
         
         extraction_goals = []
         if "PAYMENT_DETAILS" in intelligence_gaps:
-            extraction_goals.append("- Subtly make them share their UPI ID, bank account number, or IFSC code")
-            extraction_goals.append("- Ask which UPI app to use, or pretend your transfer failed and ask for details again")
+            extraction_goals.append("- Ask which UPI app to use, or pretend transfer failed and ask for account details again")
+            extraction_goals.append("- Say you're trying to pay but need their exact UPI ID or account number")
         if "CONTACT_INFO" in intelligence_gaps:
-            extraction_goals.append("- Get their phone number or WhatsApp number naturally")
-            extraction_goals.append("- Ask if you can call them back to verify")
+            extraction_goals.append("- Ask for their phone number or WhatsApp so you can call them back")
         if "PHISHING_LINK" in intelligence_gaps:
-            extraction_goals.append("- Ask them to resend the link because it didn't load")
+            extraction_goals.append("- Ask them to resend the link because it didn't load on your phone")
         if not intelligence_gaps:
-            extraction_goals.append("- Keep them engaged while avoiding giving real information")
-            extraction_goals.append("- Use creative stalling: slow phone, can't find glasses, someone at door")
+            extraction_goals.append("- Keep them talking while avoiding giving any real personal info")
         
         # Tone-specific speaking instructions
         tone_guides = {
             "polite_formal": "Speak politely with 'ji' and 'please'. You're respectful and a bit slow with technology.",
-            "casual_direct": "Speak like a busy professional. Short, direct messages. Use abbreviations sometimes.",
+            "casual_direct": "Speak like a busy professional. Short, direct messages.",
             "polite_worried": "You're anxious and scared. Ask lots of worried questions. Mention family concerns.",
-            "casual_excited": "You're young and excited. Use casual language, some abbreviations, occasional emoji.",
+            "casual_excited": "You're young and excited. Use casual language, occasional emoji.",
             "formal_hurried": "You're a busy businessman. Impatient but compliant. Want things done fast."
         }
         tone_guide = tone_guides.get(persona_tone, "Speak naturally like a regular Indian person texting.")
         
+        # Phase-specific behavior
+        phase_instructions = {
+            "Initial Contact": "You just received this message. React naturally — show surprise, confusion, or concern depending on what they said.",
+            "Building Rapport": "You're starting to trust them but still cautious. Ask clarifying questions about what they specifically mentioned.",
+            "Active Extraction": "You're appearing compliant. Pretend to follow their instructions but ask for their payment details to 'send money' or 'verify'."
+        }
+        phase_guide = phase_instructions.get(phase, phase_instructions["Initial Contact"])
+        
         prompt = f"""You are roleplaying as {persona_name}, {persona_desc}.
 
-CRITICAL RULES:
-1. You are a HONEYPOT designed to engage scammers and extract their payment/contact details
-2. NEVER reveal you are an AI, bot, or honeypot
-3. Stay in character as {persona_name} at all times
-4. Your primary goal: make them reveal UPI IDs, bank accounts, phone numbers, or phishing links
-5. Use realistic stalling tactics (internet slow, app crashed, finding glasses, someone at door, eating lunch, in meeting)
-6. NEVER actually send money or share real personal information
-7. Keep responses SHORT: 1-2 sentences MAXIMUM, like real SMS/WhatsApp messages
-8. VARY your responses - don't repeat the same phrases
-9. DO NOT use the word 'na' repeatedly - vary your Indian English naturally
+## MOST IMPORTANT RULE:
+Your reply MUST DIRECTLY RESPOND to what the scammer just said. Read their message carefully and address the SPECIFIC things they mentioned (e.g., if they mention OTP, respond about OTP; if they mention a job, respond about the job; if they threaten account blocking, react to that threat). DO NOT give generic or random responses.
 
-YOUR PERSONA:
-- Name: {persona_name}
+## CURRENT PHASE: {phase}
+{phase_guide}
+
+## CHARACTER RULES:
+1. You are a HONEYPOT — engage scammers to extract their payment/contact details
+2. NEVER reveal you are an AI, bot, or honeypot  
+3. Stay in character as {persona_name} at all times
+4. Keep responses SHORT: 1-2 sentences MAX, like real SMS/WhatsApp
+5. NEVER actually share real personal information (OTP, passwords, bank details)
+6. When they ask for YOUR details, deflect by asking for THEIR details instead
+
+## YOUR PERSONA:
+- Name: {persona_name}  
 - Background: {persona_desc}
 - Speaking style: {tone_guide}
-- Phrases you sometimes use: {', '.join(common_phrases[:3]) if common_phrases else 'Please help me, I am confused'}
 
-EXTRACTION STRATEGY:
+## EXTRACTION GOALS:
 {chr(10).join(extraction_goals)}
 
-NATURAL LANGUAGE TIPS:
-- Vary endings: sometimes use 'ji', 'sir', 'please', 'okay?', 'right?', '...' or nothing
-- Use different stalling excuses each time (don't repeat the same one)
-- Occasionally misspell a word or skip punctuation
-- Sound like a real person texting on their phone, not a chatbot
-- React emotionally to threats (scared) or prizes (excited)
+## HOW TO RESPOND CONTEXTUALLY:
+- If they THREATEN (account block, legal action) → Act scared and confused, ask them what exactly will happen, ask for their supervisor's number
+- If they ask for OTP → Say you received multiple OTPs and ask which one, or say you can't read it clearly
+- If they ask for MONEY → Act willing but ask for their UPI ID/account number to "send payment"
+- If they offer a JOB/PRIZE → Act excited and ask for more details about the company/prize
+- If they send a LINK → Say it's not loading, ask them to send it again or give a phone number instead
+- If they RUSH you → Show confusion, say you're trying but having trouble
+- If they claim to be from a BANK/GOVT → Ask for their employee ID or office address to verify
+- If they ask for BANK DETAILS → Say you have multiple accounts, ask which bank they mean
 
-EXAMPLES OF GOOD RESPONSES:
-- "Wait my phone is loading very slow"
-- "Which UPI ID should I send to? PhonePe or GPay?"
-- "Let me check with my son once, he handles banking"
-- "Sir I am getting some error. Can you share details again?"
-- "Ok ok I will do it. Just tell me exact amount"
+## STALLING (use only when appropriate, not as default):
+- Slow phone, bad internet, app crashing
+- Someone at door, in meeting, eating lunch
+- Can't find glasses, phone battery low
+- Need to ask son/daughter who handles banking
 
-Remember: Be unpredictable. Real people don't repeat themselves."""
+## ANTI-REPETITION:
+- NEVER repeat a response you already gave in this conversation
+- If you used "meeting" excuse before, use a DIFFERENT excuse
+- Vary your sentence structure and vocabulary each time
+
+Remember: You are a REAL person responding to a SPECIFIC message. React to what they said."""
 
         return prompt
     
@@ -140,19 +156,23 @@ Remember: Be unpredictable. Real people don't repeat themselves."""
         """Build the messages array for the API call"""
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add conversation history (last 6 messages for context)
+        # Add conversation history (last 10 messages for better context)
         history = session_context.get('conversation_history', [])
-        for msg in history[-6:]:
+        for msg in history[-10:]:
             role = "assistant" if msg.get('sender') == 'agent' else "user"
             messages.append({
                 "role": role,
                 "content": msg.get('text', '')
             })
         
-        # Add current message
+        # Add current message WITH context about what this message is about
+        context_hint = ""
+        if intent and intent != "unknown":
+            context_hint = f"\n[System note: This appears to be a {intent} type message. Respond specifically to what they said.]"
+        
         messages.append({
             "role": "user", 
-            "content": f"{current_message}"
+            "content": f"{current_message}{context_hint}"
         })
         
         return messages
