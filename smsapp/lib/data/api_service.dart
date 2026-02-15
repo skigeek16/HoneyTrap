@@ -1,14 +1,20 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
-  static const String defaultBaseUrl = 'http://127.0.0.1:8000';
+  static String get defaultBaseUrl {
+    if (dotenv.env['USE_LOCAL_ADB'] == 'True') {
+      return 'http://127.0.0.1:8000';
+    }
+    return dotenv.env['GCP_URL'] ?? 'http://127.0.0.1:8000';
+  }
 
   final String baseUrl;
 
   ApiService({
-    this.baseUrl = defaultBaseUrl,
-  });
+    String? baseUrl,
+  }) : baseUrl = baseUrl ?? defaultBaseUrl;
 
   /// Send a message to the backend for scam verification.
   ///
@@ -16,7 +22,7 @@ class ApiService {
   ///   { "status": "processing", "session_id": "...", "message": "..." }
   ///
   /// The actual scam detection results and stall messages arrive
-  /// asynchronously via WebSocket (see Mismatch 2 — to be implemented).
+  /// asynchronously via WebSocket.
   Future<Map<String, dynamic>> checkMessage({
     required String sessionId,
     required String messageText,

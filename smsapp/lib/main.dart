@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // For MethodChannel
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:telephony/telephony.dart';
 import 'theme/app_theme.dart';
 import 'screens/conversations_screen.dart';
@@ -7,8 +8,9 @@ import 'services/sms_event_channel.dart';
 import 'services/sms_receiver_service.dart';
 import 'services/message_queue_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   // Start the native EventChannel as early as possible so no events are missed
   SmsEventChannel().start();
   runApp(const HoneyTrapApp());

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/api_service.dart';
 import '../data/database_helper.dart';
 import '../data/session_helper.dart';
+import '../data/sms_service.dart';
 import 'websocket_service.dart';
 
 /// Verification status for a message/conversation.
@@ -50,6 +51,7 @@ class MessageQueueService {
   final ApiService _api = ApiService();
   final DatabaseHelper _db = DatabaseHelper();
   final WebSocketService _ws = WebSocketService();
+  final SmsService _sms = SmsService();
 
   static const _pendingKey = 'pending_verification_queue';
   static const _statusKey = 'verification_status_map';
@@ -67,6 +69,7 @@ class MessageQueueService {
       StreamController<Map<String, MessageStatus>>.broadcast();
 
   Stream<Map<String, MessageStatus>> get statusStream => _statusController.stream;
+  Map<String, MessageStatus> get statusSnapshot => Map.unmodifiable(_statusMap);
 
   bool _isProcessing = false;
 
@@ -111,14 +114,19 @@ class MessageQueueService {
     });
 
     // Listen for stall messages (auto-reply)
-    _ws.stallMessageStream.listen((data) {
+    _ws.stallMessageStream.listen((data) async {
       final sessionId = data['sessionId'];
       final phoneNumber = _sessionToPhone[sessionId];
       final reply = data['message_body'];
       
       if (phoneNumber != null && reply != null) {
         print('🤖 Auto-reply received for $phoneNumber: "$reply"');
-        // TODO: Integrate with SmsService to actually send this
+        try {
+          await _sms.sendSms(phoneNumber, reply);
+          print('✅ Auto-reply SENT via SMS to $phoneNumber');
+        } catch (e) {
+          print('❌ Failed to send auto-reply SMS: $e');
+        }
       }
     });
   }
