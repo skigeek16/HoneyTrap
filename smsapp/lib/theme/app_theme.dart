@@ -12,6 +12,8 @@ class AppTheme {
   static const Color accentGreen = Color(0xFF34A853);
   static const Color warningRed = Color(0xFFEA4335);
   static const Color warningOrange = Color(0xFFFBBC04);
+  static const Color warningYellow = Color(0xFFFFD600);
+  static const Color safeGreen = Color(0xFF00C853);
   static const Color textPrimary = Color(0xFFE8EAED);
   static const Color textSecondary = Color(0xFF9AA0A6);
   static const Color divider = Color(0xFF3C4043);

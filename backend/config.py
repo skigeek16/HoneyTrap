@@ -7,7 +7,8 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # API Security
-    API_KEY: str = os.getenv("API_KEY", "secret-key-12345")
+    # API_KEY removed as per user request for open backend
+
 
     # LLM Configuration - Nebius Token Factory
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
@@ -24,7 +25,14 @@ class Settings(BaseSettings):
     # Device configuration
     DEVICE: str = os.getenv("DEVICE", "cpu")
 
+    # Debugging
+    DEBUG: bool = False
+    
+    # Database
+    DATABASE_URL: str = "sqlite+aiosqlite:///./honeytrap.db"
+
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Allow extra fields in .env just in case
 
 settings = Settings()

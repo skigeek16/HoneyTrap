@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../data/session_helper.dart';
+import '../services/message_queue_service.dart';
 import 'package:intl/intl.dart';
 
 class ConversationTile extends StatelessWidget {
@@ -10,6 +11,7 @@ class ConversationTile extends StatelessWidget {
   final bool isRead;
   final bool isArchived;
   final String? scamType;
+  final MessageStatus? verificationStatus;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
@@ -21,6 +23,7 @@ class ConversationTile extends StatelessWidget {
     this.isRead = true,
     this.isArchived = false,
     this.scamType,
+    this.verificationStatus,
     required this.onTap,
     this.onLongPress,
   });
@@ -132,14 +135,14 @@ class ConversationTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Unread indicator
-            if (!isRead)
+            // Verification status dot
+            if (verificationStatus != null || !isRead)
               Container(
                 margin: const EdgeInsets.only(left: 8),
                 width: 10,
                 height: 10,
-                decoration: const BoxDecoration(
-                  color: AppTheme.primaryBlue,
+                decoration: BoxDecoration(
+                  color: _dotColor,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -147,5 +150,22 @@ class ConversationTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Determine dot color from verification status, falling back to the
+  /// original unread blue dot when no status is set.
+  Color get _dotColor {
+    switch (verificationStatus) {
+      case MessageStatus.pending:
+        return AppTheme.primaryBlue;
+      case MessageStatus.checking:
+        return AppTheme.warningYellow;
+      case MessageStatus.scam:
+        return AppTheme.warningRed;
+      case MessageStatus.safe:
+        return AppTheme.safeGreen;
+      case null:
+        return AppTheme.primaryBlue; // legacy unread dot
+    }
   }
 }

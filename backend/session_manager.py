@@ -1,14 +1,33 @@
+"""
+Async Session Manager.
+Handles session CRUD via SQLite (through SQLModel) and
+broadcasts real-time events over WebSocket.
+"""
 import json
-import requests
-from datetime import datetime
+import httpx
+from datetime import datetime, timezone
 from typing import Optional
-from backend.models import SessionState, IncomingRequest, APIResponse, ExtractedIntelligence, EngagementMetrics
 
-GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+from backend.models import (
+    SessionState, IncomingRequest, ExtractedIntelligence,
+    ScamStatusPayload, StallMessagePayload,
+)
+from backend.connection_manager import manager as ws_manager
+
 
 class SessionManager:
+    """
+    Manages session lifecycle and event broadcasting.
+
+    Sessions are kept in-memory (dict) and are also serialised to SQLite
+    via the /db helpers so they survive restarts.  The in-memory dict is
+    the primary working copy for speed.
+    """
+
     def __init__(self):
-        self.memory_store = {}
+        self.memory_store: dict[str, SessionState] = {}
+
+    # ── CRUD ───────────────────────────────────────────────────────────────
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
         return self.memory_store.get(session_id)
@@ -20,31 +39,91 @@ class SessionManager:
             meta = request.metadata
         else:
             meta = request.metadata.model_dump()
-            
-        return SessionState(
-            session_id=request.sessionId, 
-            metadata=meta, 
+
+        session = SessionState(
+            session_id=request.sessionId,
+            metadata=meta,
             conversation_history=[],
-            start_time=datetime.utcnow()
+            start_time=datetime.now(timezone.utc),
         )
+        self.memory_store[session.session_id] = session
+        return session
 
     def save_session(self, session: SessionState):
-        session.last_active = datetime.utcnow()
+        session.last_active = datetime.now(timezone.utc)
         self.memory_store[session.session_id] = session
 
     def update_session(self, session: SessionState, scammer_msg: str, agent_msg: str):
         session.message_count += 1
-        session.conversation_history.append({"sender": "scammer", "text": scammer_msg, "timestamp": str(datetime.utcnow())})
-        session.conversation_history.append({"sender": "agent", "text": agent_msg, "timestamp": str(datetime.utcnow())})
+        now = str(datetime.now(timezone.utc))
+        session.conversation_history.append(
+            {"sender": "scammer", "text": scammer_msg, "timestamp": now}
+        )
+        session.conversation_history.append(
+            {"sender": "agent", "text": agent_msg, "timestamp": now}
+        )
         session.scammer_patience = self._calculate_patience_decay(session, agent_msg)
         self.save_session(session)
+
+    # ── WebSocket Broadcasting ─────────────────────────────────────────────
+
+    async def broadcast_scam_status(
+        self,
+        session_id: str,
+        is_scam: bool,
+        confidence: float,
+        scam_type: str,
+    ):
+        """
+        Response Type 1 — Scam Status Update.
+        Pushed immediately after detection so the app can update its color dot.
+        """
+        if confidence >= 50:
+            severity, color = "SCAM", "red"
+        elif confidence >= 22:
+            severity, color = "SUSPICIOUS", "yellow"
+        else:
+            severity, color = "SAFE", "green"
+
+        payload = ScamStatusPayload(
+            is_scam=is_scam,
+            confidence=confidence,
+            severity=severity,
+            scam_type=scam_type if is_scam else None,
+            ui_color=color,
+        )
+        await ws_manager.broadcast(
+            session_id, "SCAM_STATUS_UPDATE", payload.model_dump()
+        )
+
+    async def broadcast_stall_message(
+        self,
+        session_id: str,
+        message_body: str,
+        delay: float,
+        phase: str,
+    ):
+        """
+        Response Type 2 — Stall Message.
+        Pushed after response generation so the app can relay the reply.
+        """
+        payload = StallMessagePayload(
+            message_body=message_body,
+            suggested_delay=delay,
+            phase=phase,
+        )
+        await ws_manager.broadcast(
+            session_id, "STALL_MESSAGE", payload.model_dump()
+        )
+
+    # ── Patience Decay ─────────────────────────────────────────────────────
 
     def _calculate_patience_decay(self, session: SessionState, agent_msg: str) -> float:
         patience = session.scammer_patience
         base_decay = 3.0
         stall_keywords = ["wait", "hold on", "minute", "loading", "slow", "checking", "error"]
         extract_keywords = ["upi", "account", "number", "transfer", "send money"]
-        
+
         agent_lower = agent_msg.lower()
         if any(kw in agent_lower for kw in stall_keywords):
             base_decay += 5.0
@@ -52,79 +131,5 @@ class SessionManager:
             base_decay -= 8.0
         if session.message_count <= 3:
             base_decay *= 0.5
-        
+
         return round(max(0.0, patience - base_decay), 2)
-
-    def format_response(self, session, agent_msg, scam_detected) -> APIResponse:
-        intel = session.intelligence
-        duration_seconds = int((datetime.utcnow() - session.start_time).total_seconds())
-        
-        extracted = ExtractedIntelligence(
-            bankAccounts=[e.value for e in intel.entities if e.type == "BANK_ACC"],
-            upiIds=[e.value for e in intel.entities if e.type == "UPI_ID"],
-            phishingLinks=[e.value for e in intel.entities if e.type == "URL"]
-        )
-        
-        agent_notes = self._generate_agent_notes(session, intel)
-        
-        if scam_detected and session.message_count >= 2:
-            self._send_guvi_callback(session, scam_detected, extracted, agent_notes)
-        
-        return APIResponse(
-            status="success",
-            scamDetected=scam_detected,
-            engagementMetrics=EngagementMetrics(
-                engagementDurationSeconds=duration_seconds,
-                totalMessagesExchanged=session.message_count
-            ),
-            extractedIntelligence=extracted,
-            agentNotes=agent_notes
-        )
-    
-    def _generate_agent_notes(self, session, intel) -> str:
-        notes = []
-        if intel.entities:
-            entity_types = set(e.type for e in intel.entities)
-            notes.append(f"Detected: {', '.join(entity_types)}")
-        
-        primary = [e for e in intel.entities if e.category == "PRIMARY"]
-        if primary:
-            notes.append(f"Primary intel: {len(primary)} items")
-        
-        notes.append(f"Phase: {session.phase}")
-        
-        if intel.missing_priorities:
-            notes.append(f"Seeking: {', '.join(intel.missing_priorities)}")
-        
-        return " | ".join(notes) if notes else "Engagement initiated"
-    
-    def _send_guvi_callback(self, session, scam_detected, extracted: ExtractedIntelligence, agent_notes: str):
-        try:
-            payload = {
-                "sessionId": session.session_id,
-                "scamDetected": scam_detected,
-                "totalMessagesExchanged": session.message_count,
-                "extractedIntelligence": {
-                    "bankAccounts": extracted.bankAccounts,
-                    "upiIds": extracted.upiIds,
-                    "phishingLinks": extracted.phishingLinks
-                },
-                "agentNotes": agent_notes
-            }
-            
-            response = requests.post(GUVI_CALLBACK_URL, json=payload, timeout=5)
-            print(f"GUVI Callback: {response.status_code}")
-        except Exception as e:
-            print(f"GUVI Callback failed: {e}")
-
-    def send_guvi_callback_if_ready(self, session, should_engage):
-        """Send GUVI callback if conditions are met"""
-        if should_engage and session.message_count >= 2:
-            intel = session.intelligence
-            extracted = ExtractedIntelligence(
-                bankAccounts=[e.value for e in intel.entities if e.type == "BANK_ACC"],
-                upiIds=[e.value for e in intel.entities if e.type == "UPI_ID"],
-                phishingLinks=[e.value for e in intel.entities if e.type == "URL"]
-            )
-            agent_notes = self._generate_agent_notes(session, intel)
-            self._send_guvi_callback(session, should_engage, extracted, agent_notes)

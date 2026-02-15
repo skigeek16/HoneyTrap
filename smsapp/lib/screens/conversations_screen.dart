@@ -6,6 +6,7 @@ import '../data/sms_service.dart';
 import '../data/database_helper.dart';
 import '../services/sms_event_channel.dart';
 import '../services/sms_receiver_service.dart';
+import '../services/message_queue_service.dart';
 import '../widgets/conversation_tile.dart';
 import 'chat_screen.dart';
 import 'archive_screen.dart';
@@ -21,7 +22,9 @@ class ConversationsScreen extends StatefulWidget {
 class _ConversationsScreenState extends State<ConversationsScreen> {
   final SmsService _smsService = SmsService();
   final DatabaseHelper _db = DatabaseHelper();
+  final MessageQueueService _queueService = MessageQueueService();
   StreamSubscription<SmsEvent>? _smsSub;
+  StreamSubscription<Map<String, MessageStatus>>? _queueSub;
   
   List<SmsConversation> _conversations = [];
   Set<String> _archivedNumbers = {};
@@ -29,6 +32,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   final Set<String> _unreadNumbers = {};    // numbers with new unread messages
   final Map<String, String> _updatedPreviews = {};  // phone -> latest message body
   final Map<String, DateTime> _updatedTimestamps = {}; // phone -> latest timestamp
+  Map<String, MessageStatus> _verificationStatus = {}; // phone -> queue status
   bool _isLoading = true;
   String _searchQuery = '';
   bool _isSearching = false;
@@ -39,12 +43,34 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     _loadConversations();
     // Listen for native SMS events via EventChannel
     _smsSub = SmsEventChannel().stream.listen(_onNewMessage);
+    // Listen for verification status changes from the queue
+    _verificationStatus = _queueService.statusSnapshot;
+    _queueSub = _queueService.statusStream.listen(_onQueueStatusChange);
   }
 
   @override
   void dispose() {
     _smsSub?.cancel();
+    _queueSub?.cancel();
     super.dispose();
+  }
+
+  /// Called whenever the queue service emits a new status map.
+  void _onQueueStatusChange(Map<String, MessageStatus> statusMap) {
+    if (!mounted) return;
+
+    // Check if any conversation just turned scam → reload to filter it out
+    for (final entry in statusMap.entries) {
+      final prev = _verificationStatus[entry.key];
+      if (entry.value == MessageStatus.scam && prev != MessageStatus.scam) {
+        // Scam detected — reload conversations so it moves to archive
+        _loadConversations();
+      }
+    }
+
+    setState(() {
+      _verificationStatus = Map<String, MessageStatus>.from(statusMap);
+    });
   }
 
   /// Fires the instant an SMS arrives via native EventChannel — no DB read, pure setState
@@ -544,11 +570,18 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       .map((e) => e.value)
                       .firstOrNull ?? conv.lastTimestamp;
 
+                  // Look up verification status by matching normalized phone
+                  final queueStatus = _verificationStatus.entries
+                      .where((e) => _normalizePhone(e.key) == normalized)
+                      .map((e) => e.value)
+                      .firstOrNull;
+
                   return ConversationTile(
                     phoneNumber: conv.phoneNumber,
                     lastMessage: preview,
                     timestamp: timestamp,
                     isRead: isRead,
+                    verificationStatus: queueStatus,
                     onTap: () async {
                       await _markAsRead(conv.phoneNumber);
                       if (!mounted) return;

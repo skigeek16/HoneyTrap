@@ -5,6 +5,7 @@ import 'theme/app_theme.dart';
 import 'screens/conversations_screen.dart';
 import 'services/sms_event_channel.dart';
 import 'services/sms_receiver_service.dart';
+import 'services/message_queue_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,6 +131,9 @@ class _PermissionGateState extends State<PermissionGate> with WidgetsBindingObse
       await receiver.initialize();
       // Process any pending archives from background SMS processing
       await receiver.processPendingArchives();
+      // Re-queue any messages that were pending (blue dot) before the app
+      // was killed / restarted.
+      await MessageQueueService().loadAndRequeuePending();
     } catch (e) {
       debugPrint('Service init error: $e');
     }

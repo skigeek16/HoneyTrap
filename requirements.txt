@@ -10,3 +10,6 @@ regex
 openai
 python-dotenv
 httpx
+sqlmodel
+aiosqlite
+websockets

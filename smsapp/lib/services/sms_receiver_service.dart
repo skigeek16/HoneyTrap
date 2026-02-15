@@ -4,12 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database_helper.dart';
-import '../data/api_service.dart';
 import '../data/session_helper.dart';
+import 'message_queue_service.dart';
 import 'sms_event_channel.dart';
 
 /// Singleton service that reacts to native SMS events arriving over
-/// [SmsEventChannel] and runs the scam-detection / archival pipeline.
+/// [SmsEventChannel] and enqueues them into [MessageQueueService] for
+/// scam-detection verification.
 class SmsReceiverService {
   static final SmsReceiverService _instance = SmsReceiverService._internal();
   factory SmsReceiverService() => _instance;
@@ -18,13 +19,15 @@ class SmsReceiverService {
   static const _smsMethodChannel = MethodChannel('com.example.smsapp/sms');
 
   final DatabaseHelper _db = DatabaseHelper();
-  final ApiService _api = ApiService();
+  final MessageQueueService _queue = MessageQueueService();
   FlutterLocalNotificationsPlugin? _notifications;
 
   StreamSubscription<SmsEvent>? _eventSub;
+  StreamSubscription<Map<String, MessageStatus>>? _statusSub;
   bool _isInitialized = false;
 
-  /// Initialize: subscribe to the native EventChannel stream.
+  /// Initialize: subscribe to the native EventChannel stream and to the
+  /// queue status stream (for notifications on scam detection).
   Future<void> initialize() async {
     if (_isInitialized) return;
     _isInitialized = true;
@@ -34,8 +37,11 @@ class SmsReceiverService {
     // Start the native EventChannel if not already started
     SmsEventChannel().start();
 
-    // Process every incoming SMS event (runs the API / archival pipeline)
+    // Process every incoming SMS event via the queue
     _eventSub = SmsEventChannel().stream.listen(_handleSmsEvent);
+
+    // Watch for scam results to show notifications
+    _statusSub = _queue.statusStream.listen(_onStatusChange);
   }
 
   Future<void> _initNotifications() async {
@@ -49,6 +55,10 @@ class SmsReceiverService {
 
   // ─── SMS event handler ───────────────────────────────────────────
 
+  /// Track the last message body per phone so we can show it in the
+  /// notification when the queue finishes processing.
+  final Map<String, String> _lastMessageBody = {};
+
   Future<void> _handleSmsEvent(SmsEvent event) async {
     final phoneNumber = event.address;
     final body = event.body;
@@ -60,32 +70,25 @@ class SmsReceiverService {
       final isAllowed = await _db.isNumberAllowed(phoneNumber);
       if (isAllowed) return;
 
-      final sessionId = SessionHelper.generateSessionId(phoneNumber);
+      // Remember the message body for notifications
+      _lastMessageBody[phoneNumber] = body;
 
-      // Short delay for system stability
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Call backend
-      final result = await _api.checkMessage(
-        sessionId: sessionId,
-        messageText: body,
-      );
-
-      final scamDetected = result['scamDetected'] == true;
-
-      if (scamDetected) {
-        await _db.archiveConversation(
-          phoneNumber: phoneNumber,
-          sessionId: sessionId,
-          lastMessage: body,
-          scamType: result['scamType'] ?? 'Suspicious',
-          confidence: (result['confidence'] ?? 0.0).toDouble(),
-        );
-
-        await _showScamNotification(phoneNumber, body);
-      }
+      // Enqueue for verification (blue dot → yellow → red/green)
+      _queue.enqueue(phoneNumber: phoneNumber, messageBody: body);
     } catch (e) {
       debugPrint('SmsReceiverService: error processing SMS – $e');
+    }
+  }
+
+  // ─── React to queue status changes (for notifications) ──────────
+
+  void _onStatusChange(Map<String, MessageStatus> statusMap) {
+    for (final entry in statusMap.entries) {
+      if (entry.value == MessageStatus.scam) {
+        final body = _lastMessageBody[entry.key] ?? '';
+        _showScamNotification(entry.key, body);
+        _lastMessageBody.remove(entry.key);
+      }
     }
   }
 
@@ -169,5 +172,6 @@ class SmsReceiverService {
 
   void dispose() {
     _eventSub?.cancel();
+    _statusSub?.cancel();
   }
 }
