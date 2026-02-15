@@ -16,3 +16,4 @@ services:
       - key: LLM_MODEL
         value: meta-llama/Llama-3.3-70B-Instruct-fast
     healthCheckPath: /health
+

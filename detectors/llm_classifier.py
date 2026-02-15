@@ -105,3 +105,4 @@ def get_llm_classifier() -> LLMScamClassifier:
     if _classifier_instance is None:
         _classifier_instance = LLMScamClassifier()
     return _classifier_instance
+

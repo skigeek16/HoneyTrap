@@ -127,3 +127,4 @@ class SessionManager:
                 print(f"GUVI Callback: {response.status_code} - {response.text[:100]}")
             except Exception as e:
                 print(f"GUVI Callback failed: {e}")
+
