@@ -9,6 +9,15 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Back
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 
+import uvicorn
+import traceback
+import sys
+import os
+
+# Add project root to sys.path so we can import 'backend' and 'processing'
+# even when running from inside the 'backend' directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from backend.models import IncomingRequest, SimpleReply
 from backend.session_manager import SessionManager
 from backend.connection_manager import manager as ws_manager
@@ -19,8 +28,6 @@ from processing.personas.manager import PersonaManager
 from processing.intelligence.manager import IntelligenceManager
 from processing.response.engine import ResponseEngine
 
-import uvicorn
-import traceback
 
 # ─── App Setup ─────────────────────────────────────────────────────────────────
 
@@ -158,8 +165,12 @@ async def _process_message(session_id: str, message_text: str):
             scam_type=detect_res.get("scam_type", "Unknown"),
         )
 
+        # ── If SAFE, stop here. No reply, no engagement. ─────────────
+        if not should_engage:
+            return
+
         # ── Stage 2: Persona Selection ────────────────────────────────
-        if should_engage and not session.persona:
+        if not session.persona:
             selected_persona = persona_manager.select_persona(detect_res["scam_type"])
             session.persona = selected_persona.model_dump()
             session.strategy = persona_manager.initialize_strategy(selected_persona).model_dump()
@@ -173,16 +184,12 @@ async def _process_message(session_id: str, message_text: str):
         )
 
         # ── Stage 4: Response Generation ──────────────────────────────
-        if should_engage:
-            intent = detect_res["details"]["ml_ensemble"]["intent"]
-            resp_data = await run_in_threadpool(
-                responder.generate_response, session, message_text, intent
-            )
-            agent_msg = resp_data["response_text"]
-            delay = resp_data.get("suggested_delay", 2.0)
-        else:
-            agent_msg = "Thank you for your message, but I'm not interested."
-            delay = 1.0
+        intent = detect_res["details"]["ml_ensemble"]["intent"]
+        resp_data = await run_in_threadpool(
+            responder.generate_response, session, message_text, intent
+        )
+        agent_msg = resp_data["response_text"]
+        delay = resp_data.get("suggested_delay", 2.0)
 
         # Update session history
         session_manager.update_session(session, message_text, agent_msg)

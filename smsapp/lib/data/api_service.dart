@@ -2,19 +2,21 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String defaultBaseUrl = 'https://honeytrap-v7df4xne4q-el.a.run.app';
-  static const String defaultApiKey = 'secret-key-12345';
+  static const String defaultBaseUrl = 'http://127.0.0.1:8000';
 
   final String baseUrl;
-  final String apiKey;
 
   ApiService({
     this.baseUrl = defaultBaseUrl,
-    this.apiKey = defaultApiKey,
   });
 
-  /// Check a message against the scam detection backend
-  /// Returns: {status, reply, scamDetected}
+  /// Send a message to the backend for scam verification.
+  ///
+  /// Returns the immediate ACK from the server:
+  ///   { "status": "processing", "session_id": "...", "message": "..." }
+  ///
+  /// The actual scam detection results and stall messages arrive
+  /// asynchronously via WebSocket (see Mismatch 2 — to be implemented).
   Future<Map<String, dynamic>> checkMessage({
     required String sessionId,
     required String messageText,
@@ -26,11 +28,14 @@ class ApiService {
         Uri.parse('$baseUrl/v1/chat'),
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
         },
         body: jsonEncode({
           'sessionId': sessionId,
-          'message': messageText,
+          'message': {
+            'sender': 'scammer',
+            'text': messageText,
+            'timestamp': DateTime.now().toUtc().toIso8601String(),
+          },
           'conversationHistory': [],
           'metadata': {
             'channel': channel,
@@ -45,27 +50,24 @@ class ApiService {
       } else {
         return {
           'status': 'error',
-          'reply': '',
-          'scamDetected': false,
-          'error': 'HTTP ${response.statusCode}: ${response.body}',
+          'session_id': sessionId,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
         };
       }
     } catch (e) {
       return {
         'status': 'error',
-        'reply': '',
-        'scamDetected': false,
-        'error': e.toString(),
+        'session_id': sessionId,
+        'message': e.toString(),
       };
     }
   }
 
-  /// Get session info from backend
+  /// Get session info from backend (debug / dashboard)
   Future<Map<String, dynamic>?> getSessionInfo(String sessionId) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/v1/session/$sessionId'),
-        headers: {'x-api-key': apiKey},
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {

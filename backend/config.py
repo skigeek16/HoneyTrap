@@ -2,8 +2,11 @@ import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# Load .env file from parent directory
+basedir = os.path.abspath(os.path.dirname(__file__))
+parent_dir = os.path.abspath(os.path.join(basedir, ".."))
+env_path = os.path.join(parent_dir, ".env")
+load_dotenv(env_path)
 
 class Settings(BaseSettings):
     # API Security
@@ -32,7 +35,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./honeytrap.db"
 
     class Config:
-        env_file = ".env"
+        # Use absolute path calculated above
+        env_file = env_path
         extra = "ignore"  # Allow extra fields in .env just in case
 
 settings = Settings()
