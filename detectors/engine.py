@@ -3,6 +3,7 @@ from .rule_based import RuleBasedDetector
 from .ml_ensemble import MLEnsembleDetector
 from .llm_classifier import get_llm_classifier
 from config import settings
+import time
 
 class ScamDetectionEngine:
     def __init__(self):
@@ -18,14 +19,35 @@ class ScamDetectionEngine:
         }
 
     def evaluate(self, text: str) -> Dict[str, Any]:
-        """Main pipeline: Triple-layer detection (Rule + ML + LLM)"""
+        """Main pipeline: Triple-layer detection (Rule + ML + LLM)
+        
+        FAST PATH: If rule+ML already give high confidence, skip LLM classifier
+        to save ~12s latency. Only call LLM for borderline cases.
+        """
+        t0 = time.time()
+        
         rule_res = self.rule_detector.analyze(text)
         ml_res = self.ml_detector.analyze(text)
-        llm_res = self.llm_classifier.classify(text)
-        final_score = self._calculate_ensemble_score(rule_res, ml_res, llm_res)
         
-        # Lowered threshold for better recall
+        # Calculate rule+ML score first to decide if LLM is needed
+        preliminary_score = self._calculate_ensemble_score(rule_res, ml_res, llm=None)
+        
         threshold = 22
+        
+        # FAST PATH: Skip LLM if rule+ML already confident (saves ~12s)
+        if preliminary_score >= 35:
+            print(f"⚡ FAST PATH: rule+ML score={preliminary_score:.1f} >= 35, skipping LLM classifier")
+            llm_res = {'llm_enabled': False, 'llm_score': 0, 'llm_scam_type': '', 'skipped': True}
+            final_score = preliminary_score
+        else:
+            # SLOW PATH: Borderline case, need LLM for accurate classification
+            print(f"🔍 SLOW PATH: rule+ML score={preliminary_score:.1f} < 35, calling LLM classifier")
+            llm_res = self.llm_classifier.classify(text)
+            final_score = self._calculate_ensemble_score(rule_res, ml_res, llm_res)
+        
+        elapsed = time.time() - t0
+        print(f"⏱️ Detection took {elapsed:.1f}s (final_score={final_score:.1f})")
+        
         decision = "ACTIVATE_AGENT" if final_score >= threshold else "POLITE_DECLINE"
         
         # Use LLM scam type if available and confident, else fall back to rule-based
