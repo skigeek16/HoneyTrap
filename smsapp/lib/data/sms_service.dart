@@ -80,11 +80,31 @@ class SmsService {
   }
 
   /// Send an SMS
+  /// Send an SMS
   Future<void> sendSms(String phoneNumber, String message) async {
-    await _telephony.sendSms(
-      to: phoneNumber,
-      message: message,
-    );
+    try {
+      // 1. Send via Telephony (network)
+      await _telephony.sendSms(
+        to: phoneNumber,
+        message: message,
+      );
+      
+      // 2. Write to system 'Sent' folder manually
+      // This is required because as the Default SMS App, the system doesn't always
+      // auto-write sent messages from 3rd party libs.
+      try {
+        await platform.invokeMethod('addToSent', {
+          'phoneNumber': phoneNumber,
+          'message': message,
+        });
+        debugPrint('SmsService: Wrote sent message to DB');
+      } catch (e) {
+        debugPrint('SmsService: Failed to write to Sent box: $e');
+      }
+    } catch (e) {
+      debugPrint('SmsService: Error sending SMS: $e');
+      rethrow;
+    }
   }
 
   /// Delete all messages for a phone number from SMS database

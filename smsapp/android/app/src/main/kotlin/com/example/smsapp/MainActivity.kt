@@ -106,9 +106,47 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID_ARGUMENT", "Phone number is required", null)
                     }
                 }
+                "addToSent" -> {
+                    val phoneNumber = call.argument<String>("phoneNumber")
+                    val message = call.argument<String>("message")
+                    if (phoneNumber != null && message != null) {
+                        val added = addToSent(phoneNumber, message)
+                        result.success(added)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Phone number and message are required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /**
+     * Manually add a sent message to the system SMS database (Sent folder).
+     */
+    private fun addToSent(phoneNumber: String, message: String): Boolean {
+        return try {
+            val values = ContentValues().apply {
+                put(Telephony.Sms.ADDRESS, phoneNumber)
+                put(Telephony.Sms.BODY, message)
+                put(Telephony.Sms.DATE, System.currentTimeMillis())
+                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                put(Telephony.Sms.READ, 1)
+            }
+            
+            val uri = contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+            if (uri != null) {
+                Log.d(TAG, "Added to sent: $uri")
+                true
+            } else {
+                Log.e(TAG, "Failed to add to sent")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding to sent", e)
+            false
+        }
+    }
     }
 
     /**

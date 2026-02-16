@@ -66,14 +66,41 @@ class DatabaseHelper {
     double confidence = 0.0,
   }) async {
     final db = await database;
-    return await db.insert('archived_conversations', {
-      'phone_number': phoneNumber,
-      'session_id': sessionId,
-      'last_message': lastMessage,
-      'scam_type': scamType,
-      'confidence': confidence,
-      'archived_at': DateTime.now().toIso8601String(),
-    });
+
+    // Check if there is already an active archived conversation for this number
+    final existing = await db.query(
+      'archived_conversations',
+      where: 'phone_number = ? AND is_active = 1',
+      whereArgs: [phoneNumber],
+    );
+
+    if (existing.isNotEmpty) {
+      // Update the existing record
+      final id = existing.first['id'] as int;
+      return await db.update(
+        'archived_conversations',
+        {
+          'session_id': sessionId,
+          'last_message': lastMessage,
+          'scam_type': scamType,
+          'confidence': confidence,
+          'archived_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } else {
+      // Insert new record
+      return await db.insert('archived_conversations', {
+        'phone_number': phoneNumber,
+        'session_id': sessionId,
+        'last_message': lastMessage,
+        'scam_type': scamType,
+        'confidence': confidence,
+        'archived_at': DateTime.now().toIso8601String(),
+        'is_active': 1,
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> getArchivedConversations() async {
