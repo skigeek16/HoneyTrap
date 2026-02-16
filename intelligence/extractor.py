@@ -13,11 +13,11 @@ class ExtractionEngine:
 
     def _load_resources(self):
         print("🕵️ Loading Intelligence Extraction...")
-        # Order matters: EMAIL must be checked before UPI_ID to avoid overlap
+        # Order matters: EMAIL and PHONE_IN must be checked before UPI_ID and BANK_ACC
         self.patterns = {
             "EMAIL": re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
-            "UPI_ID": re.compile(r'[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}'), 
             "PHONE_IN": re.compile(r'(?:\+91[\-\s]?)?[6-9]\d{9}'),
+            "UPI_ID": re.compile(r'[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}'), 
             "BANK_ACC": re.compile(r'\b\d{9,18}\b'),
             "IFSC": re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$'), 
             "URL": re.compile(r'(https?://\S+|www\.\S+|bit\.ly/\S+)'),
@@ -30,26 +30,37 @@ class ExtractionEngine:
 
     def extract_regex(self, text: str, turn: int) -> List[Entity]:
         entities = []
-        # Track extracted emails to prevent UPI false positives
+        # Track extracted values to prevent cross-type false positives
         extracted_emails = set()
+        extracted_phone_digits = set()
         
         for type_name, pattern in self.patterns.items():
             matches = pattern.findall(text)
             for match in matches:
                 clean_val = match.strip() if isinstance(match, str) else match[0].strip()
                 
-                # Track emails so we can exclude them from UPI matches
+                # Track emails to exclude from UPI matches
                 if type_name == "EMAIL":
                     extracted_emails.add(clean_val)
                 
-                # Skip UPI matches that are actually emails (contain dot after @)
+                # Track phone digits to exclude from bank account matches
+                if type_name == "PHONE_IN":
+                    digits_only = re.sub(r'\D', '', clean_val)
+                    if len(digits_only) > 10:
+                        digits_only = digits_only[-10:]
+                    extracted_phone_digits.add(digits_only)
+                
+                # Skip UPI matches that are actually emails
                 if type_name == "UPI_ID":
-                    # Check if this match overlaps with any email
                     domain_part = clean_val.split('@')[-1] if '@' in clean_val else ''
                     if '.' in domain_part:
-                        continue  # This is an email, not a UPI ID
-                    # Also skip if the full value is a substring of any extracted email
+                        continue
                     if any(clean_val in email for email in extracted_emails):
+                        continue
+                
+                # Skip BANK_ACC matches that are actually phone numbers
+                if type_name == "BANK_ACC":
+                    if clean_val in extracted_phone_digits:
                         continue
                 
                 category = "TACTICAL"
