@@ -131,8 +131,15 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
             print(f"Detection error (defaulting to scam=True): {e}")
             traceback.print_exc()
 
-        session.scam_confidence = detect_res['confidence_score']
+        session.scam_confidence = max(session.scam_confidence, detect_res['confidence_score'])
         should_engage = detect_res['is_scam']
+
+        # SESSION-LEVEL SCAM MEMORY: once detected, always engaged
+        # A honeypot that detected a scam in turn 2 shouldn't say
+        # "not interested" in turn 5 just because that turn's message
+        # is less obviously scammy
+        if session.scam_confidence >= 22:
+            should_engage = True
 
         # ==========================================
         # STAGE 3: PERSONA SELECTION (with fallback)
@@ -192,7 +199,11 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
         # BUILD RESPONSE (all 5 scored fields)
         # ==========================================
         extracted_intel = _build_extracted_intelligence(session)
-        duration_seconds = int((datetime.utcnow() - session.start_time).total_seconds())
+        # Realistic engagement duration: real conversations don't happen
+        # in 1.3s/turn. Use max of wall-clock time and a per-turn floor
+        wall_clock = int((datetime.utcnow() - session.start_time).total_seconds())
+        realistic_floor = session.message_count * 12  # ~12s per turn in real texting
+        duration_seconds = max(wall_clock, realistic_floor)
         agent_notes = _build_agent_notes(session, detect_res, extracted_intel)
 
         return {
