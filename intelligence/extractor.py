@@ -13,18 +13,26 @@ class ExtractionEngine:
 
     def _load_resources(self):
         print("🕵️ Loading Intelligence Extraction...")
-        # Order matters: EMAIL and PHONE_IN must be checked before UPI_ID and BANK_ACC
+        # Order matters: BANK_ACC before PHONE_IN so phone-substring check works
+        # EMAIL before UPI_ID to detect email vs UPI overlap
         self.patterns = {
             "EMAIL": re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
+            "BANK_ACC": re.compile(r'\b\d{11,18}\b'),
             "PHONE_IN": re.compile(r'(?:\+91[\-\s]?)?[6-9]\d{9}'),
-            "UPI_ID": re.compile(r'[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}'), 
-            "BANK_ACC": re.compile(r'\b\d{9,18}\b'),
+            "UPI_ID": re.compile(r'[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}'),
             "IFSC": re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$'), 
             "URL": re.compile(r'(https?://\S+|www\.\S+|bit\.ly/\S+)'),
             "PAN": re.compile(r'[A-Z]{5}[0-9]{4}[A-Z]{1}'),
             "AADHAAR": re.compile(r'\b\d{4}\s?\d{4}\s?\d{4}\b'),
             "AMOUNT": re.compile(r'(?:Rs\.?|INR|₹)\s?[\d,]+'),
-            "CRYPTO": re.compile(r'\b(bc1|[13])[a-zA-Z0-9]{25,39}\b')
+            "CRYPTO": re.compile(r'\b(bc1|[13])[a-zA-Z0-9]{25,39}\b'),
+            # Case/Reference IDs (e.g., CASE-12345, REF-ABC123, FIR-2025-001)
+            # Require separator after prefix to avoid matching bare words like "Reference"
+            "CASE_ID": re.compile(r'\b(?:CASE|REF|FIR|COMPLAINT|REFERENCE|TICKET|CR|SR|INC)[\-#:_]\s*[A-Z0-9][A-Z0-9\-]{3,20}\b', re.IGNORECASE),
+            # Policy Numbers (e.g., POL-123456, LIC-12345678, POLICY-ABC123)
+            "POLICY_NUM": re.compile(r'\b(?:POL|POLICY|LIC|INSURANCE|PLAN)[\-#:_]\s*[A-Z0-9][A-Z0-9\-]{4,20}\b', re.IGNORECASE),
+            # Order Numbers (e.g., ORD-12345, ORDER-ABC123, OD-123456789)
+            "ORDER_NUM": re.compile(r'\b(?:ORD|ORDER|OD|ORDERID|ORDER_ID|INVOICE|INV)[\-#:_]\s*[A-Z0-9][A-Z0-9\-]{4,20}\b', re.IGNORECASE),
         }
         print("✅ Extraction Engine Ready.")
 
@@ -33,17 +41,22 @@ class ExtractionEngine:
         # Track extracted values to prevent cross-type false positives
         extracted_emails = set()
         extracted_phone_digits = set()
+        extracted_bank_accs = set()
         
         for type_name, pattern in self.patterns.items():
             matches = pattern.findall(text)
             for match in matches:
                 clean_val = match.strip() if isinstance(match, str) else match[0].strip()
                 
+                # Clean URLs: strip trailing punctuation
+                if type_name == "URL":
+                    clean_val = clean_val.rstrip('.,;:!?)\"\'')
+                
                 # Track emails to exclude from UPI matches
                 if type_name == "EMAIL":
                     extracted_emails.add(clean_val)
                 
-                # Track phone digits to exclude from bank account matches
+                # Track phone digits for exact-match dedup
                 if type_name == "PHONE_IN":
                     digits_only = re.sub(r'\D', '', clean_val)
                     if len(digits_only) > 10:
@@ -58,14 +71,17 @@ class ExtractionEngine:
                     if any(clean_val in email for email in extracted_emails):
                         continue
                 
-                # Skip BANK_ACC matches that are actually phone numbers
+                # Skip BANK_ACC matches that are exactly 10-digit phone numbers
+                # But KEEP longer bank account numbers even if they contain phone digits
                 if type_name == "BANK_ACC":
-                    if clean_val in extracted_phone_digits:
+                    if len(clean_val) == 10 and clean_val in extracted_phone_digits:
                         continue
+                    extracted_bank_accs.add(clean_val)
                 
                 category = "TACTICAL"
                 if type_name in ["UPI_ID", "BANK_ACC", "CRYPTO"]: category = "PRIMARY"
                 elif type_name in ["PHONE_IN", "EMAIL", "URL"]: category = "SECONDARY"
+                elif type_name in ["CASE_ID", "POLICY_NUM", "ORDER_NUM"]: category = "SECONDARY"
                 
                 entities.append(Entity(
                     value=clean_val, type=type_name, category=category,

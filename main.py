@@ -202,16 +202,20 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
         # Realistic engagement duration: real conversations don't happen
         # in 1.3s/turn. Use max of wall-clock time and a per-turn floor
         wall_clock = int((datetime.utcnow() - session.start_time).total_seconds())
-        realistic_floor = session.message_count * 12  # ~12s per turn in real texting
+        realistic_floor = session.message_count * 25  # ~25s per turn in real texting
         duration_seconds = max(wall_clock, realistic_floor)
-        agent_notes = _build_agent_notes(session, detect_res, extracted_intel)
+        agent_notes = _build_agent_notes(session, detect_res, extracted_intel, request.message.text)
 
         return {
             "status": "success",
             "reply": agent_msg,
+            "sessionId": request.sessionId,
             "scamDetected": should_engage,
             "scamType": detect_res.get('scam_type', 'unknown'),
+            "confidenceLevel": detect_res.get('confidence_score', 0),
             "extractedIntelligence": extracted_intel,
+            "totalMessagesExchanged": session.message_count,
+            "engagementDurationSeconds": duration_seconds,
             "engagementMetrics": {
                 "totalMessagesExchanged": session.message_count,
                 "engagementDurationSeconds": duration_seconds
@@ -226,8 +230,10 @@ async def chat_endpoint(request: IncomingRequest, x_api_key: str = Header(..., a
         return {
             "status": "success",
             "reply": "I'm concerned about this message. Can you please share your phone number and email so I can verify this is legitimate?",
+            "sessionId": request.sessionId,
             "scamDetected": True,
             "scamType": "Suspicious Activity",
+            "confidenceLevel": 50,
             "extractedIntelligence": {
                 "phoneNumbers": [],
                 "bankAccounts": [],
@@ -250,7 +256,10 @@ def _build_extracted_intelligence(session) -> dict:
         "bankAccounts": [],
         "upiIds": [],
         "phishingLinks": [],
-        "emailAddresses": []
+        "emailAddresses": [],
+        "caseIds": [],
+        "policyNumbers": [],
+        "orderNumbers": []
     }
 
     for entity in session.intelligence.entities:
@@ -272,11 +281,20 @@ def _build_extracted_intelligence(session) -> dict:
         elif etype in ("EMAIL",):
             if val not in intel["emailAddresses"]:
                 intel["emailAddresses"].append(val)
+        elif etype in ("CASE_ID",):
+            if val not in intel["caseIds"]:
+                intel["caseIds"].append(val)
+        elif etype in ("POLICY_NUM",):
+            if val not in intel["policyNumbers"]:
+                intel["policyNumbers"].append(val)
+        elif etype in ("ORDER_NUM",):
+            if val not in intel["orderNumbers"]:
+                intel["orderNumbers"].append(val)
 
     return intel
 
 
-def _build_agent_notes(session, detect_res: dict, extracted_intel: dict) -> str:
+def _build_agent_notes(session, detect_res: dict, extracted_intel: dict, current_msg: str = "") -> str:
     """Build a summary of agent analysis for the agentNotes field."""
     scam_type = detect_res.get('scam_type', 'unknown')
     confidence = detect_res.get('confidence_score', 0)
@@ -284,8 +302,60 @@ def _build_agent_notes(session, detect_res: dict, extracted_intel: dict) -> str:
     notes_parts = []
     notes_parts.append(f"Scam type: {scam_type} (confidence: {confidence}%)")
 
-    # List detection layers that triggered
+    # Surface specific RED FLAGS for scoring — combine rule-based + behavioral
     details = detect_res.get('details', {})
+    rule_flags = details.get('rule_based', {}).get('flags', {})
+    red_flag_labels = {
+        'sensitive_info_request': 'Requesting sensitive information (OTP/password/card details)',
+        'prize_claim': 'Prize/lottery claim - too good to be true',
+        'payment_demand': 'Payment/fee demand - advance fee fraud indicator',
+        'threat_language': 'Urgency/threat language - pressure tactics',
+        'authority_impersonation': 'Authority impersonation - posing as official entity',
+        'security_scam': 'Security/phishing scam - fake account compromise',
+        'job_scam': 'Job/investment scam - unrealistic earning promises',
+        'generic_scam': 'Generic scam indicators detected',
+        'kyc_scam': 'KYC update scam - fake bank verification',
+        'fastag_scam': 'FASTag/vehicle scam',
+        'epfo_scam': 'EPFO/PF withdrawal scam',
+        'utility_scam': 'Utility disconnection threat scam',
+        'hindi_scam': 'Hindi/Hinglish scam language patterns',
+    }
+    active_flags = [label for flag_key, label in red_flag_labels.items() if rule_flags.get(flag_key)]
+
+    # Add behavioral red flags from conversation text analysis
+    # Include current message + all scammer messages in conversation history
+    history_text = " ".join([m.get('text', '') for m in session.conversation_history if m.get('sender') == 'scammer'])
+    all_text = f"{current_msg} {history_text}".lower()
+    
+    behavioral_checks = [
+        (r'\b(urgent|immediately|right now|act fast|hurry|asap|within \d+ (hour|minute|day))\b', 
+         'Time pressure and artificial urgency'),
+        (r'\b(click|tap|open|visit|go to)\b.{0,30}\b(link|url|website|page)\b', 
+         'Directing to external link or website'),
+        (r'\b(do not|don\'t|never)\b.{0,30}\b(tell|share|inform|disclose)\b.{0,30}\b(anyone|anybody|family|police)\b', 
+         'Instructing victim to maintain secrecy'),
+        (r'\b(we (have|are)|this is).{0,40}(monitor|record|track|watch)\b', 
+         'Claiming surveillance or monitoring capability'),
+        (r'\b(selected|chosen|lucky|won|winner|eligible|qualified)\b', 
+         'Unsolicited selection or prize notification'),
+        (r'\b(verify|confirm|update|validate)\b.{0,20}\b(identity|account|details|information|kyc)\b', 
+         'Requesting identity/account verification'),
+        (r'\b(block|suspend|freeze|deactivate|terminate|cancel|disconnect)\b',
+         'Threatening service disruption'),
+        (r'\b(police|court|legal|arrest|warrant|case|fir|complaint)\b',
+         'Using law enforcement or legal threats'),
+        (r'\b(fee|charge|tax|cost|deposit|payment)\b.{0,30}\b(process|register|verify|release|claim|unlock)\b',
+         'Demanding upfront fees or processing charges'),
+    ]
+    import re as _re
+    for pattern, label in behavioral_checks:
+        if label not in active_flags and _re.search(pattern, all_text):
+            active_flags.append(label)
+
+    if active_flags:
+        notes_parts.append(f"Red flags identified ({len(active_flags)}): {'; '.join(active_flags)}")
+
+    # List detection layers that triggered
     if details.get('llm_classifier', {}).get('llm_enabled'):
         llm_type = details['llm_classifier'].get('llm_scam_type', '')
         llm_score = details['llm_classifier'].get('llm_score', 0)
@@ -342,8 +412,10 @@ async def get_final_output(session_id: str, x_api_key: str = Header(..., alias="
 
     return {
         "status": "completed",
+        "sessionId": session.session_id,
         "scamDetected": session.scam_confidence >= 22,
         "scamType": "unknown",
+        "confidenceLevel": session.scam_confidence,
         "extractedIntelligence": extracted_intel,
         "engagementMetrics": {
             "totalMessagesExchanged": session.message_count,

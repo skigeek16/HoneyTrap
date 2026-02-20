@@ -1,0 +1,9 @@
+.git
+.gitignore
+venv/
+__pycache__/
+*.pyc
+.env
+.env.example
+stress_test.py
+render.yaml

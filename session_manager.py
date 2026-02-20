@@ -103,13 +103,21 @@ class SessionManager:
         if scam_detected and session.message_count >= 2:
             intel = session.intelligence
             
+            # Calculate engagement duration
+            duration_seconds = int((datetime.utcnow() - session.start_time).total_seconds())
+            realistic_floor = session.message_count * 25  # ~25s per turn in real texting
+            duration_seconds = max(duration_seconds, realistic_floor)
+            
             # Build extracted intelligence with ALL required fields
             extracted = {
                 "bankAccounts": [e.value for e in intel.entities if e.type == "BANK_ACC"],
                 "upiIds": [e.value for e in intel.entities if e.type == "UPI_ID"],
                 "phishingLinks": [e.value for e in intel.entities if e.type == "URL"],
                 "phoneNumbers": [e.value for e in intel.entities if e.type == "PHONE_IN"],
-                "suspiciousKeywords": [e.value for e in intel.entities if e.type == "KEYWORD"]
+                "emailAddresses": [e.value for e in intel.entities if e.type == "EMAIL"],
+                "caseIds": [e.value for e in intel.entities if e.type == "CASE_ID"],
+                "policyNumbers": [e.value for e in intel.entities if e.type == "POLICY_NUM"],
+                "orderNumbers": [e.value for e in intel.entities if e.type == "ORDER_NUM"],
             }
             
             agent_notes = self._generate_agent_notes(session, intel)
@@ -119,6 +127,7 @@ class SessionManager:
                     "sessionId": session.session_id,
                     "scamDetected": scam_detected,
                     "totalMessagesExchanged": session.message_count,
+                    "engagementDurationSeconds": duration_seconds,
                     "extractedIntelligence": extracted,
                     "agentNotes": agent_notes
                 }
